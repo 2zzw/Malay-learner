@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "555927879756",
+    "project_id": "malay-learner",
+    "storage_bucket": "malay-learner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:555927879756:android:13f7e9b87a71d3c541b4e9",
+        "android_client_info": {
+          "package_name": "com.example.malay"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpUxwq7-QvqMPbq4P0n0hkYwsqKZ5fVZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
