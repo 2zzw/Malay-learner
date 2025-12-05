@@ -1,5 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/views/pages/search/search_page.dart';
+import 'package:malay/views/pages/vocabulary/vocabulary_book_page.dart';
+import 'package:malay/views/pages/stats_page.dart';
+import 'package:malay/views/pages/profile_page.dart';
+import 'package:malay/views/pages/learning_session_page.dart';
+import 'package:malay/views/pages/ai_assistant_page.dart';
 
 // =============================================================================
 // 2. MODELS
@@ -241,7 +247,14 @@ class StudyActionArea extends StatelessWidget {
             subtitle: "New words",
             icon: Icons.school_outlined,
             colorAccent: Colors.teal.shade800,
-            onTap: () => onAction('learn'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LearningSessionPage(),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(width: 16),
@@ -343,19 +356,38 @@ class BottomDock extends StatelessWidget {
           _DockItem(
             icon: Icons.menu_book_rounded,
             label: "Vocab",
-            onTap: () => onNavTap('vocab'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const VocabularyBookPage(),
+                ),
+              );
+            },
           ),
           // AI 按钮稍微大一点，突出显示
           _DockItem(
             icon: Icons.auto_awesome,
             label: "AI Chat",
             isHighlight: true,
-            onTap: () => onNavTap('ai'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AIAssistantPage(),
+                ),
+              );
+            },
           ),
           _DockItem(
             icon: Icons.bar_chart_rounded,
             label: "Progress",
-            onTap: () => onNavTap('progress'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StatsPage()),
+              );
+            },
           ),
         ],
       ),
@@ -471,8 +503,22 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   // 顶部：头像 & 搜索
                   TopBar(
-                    onAvatarTap: () => _navTo("Profile"),
-                    onSearchTap: () => _navTo("Search"),
+                    onAvatarTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ProfilePage(),
+                        ),
+                      );
+                    },
+                    onSearchTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SearchPage(),
+                        ),
+                      );
+                    },
                   ),
 
                   const Spacer(flex: 2),
