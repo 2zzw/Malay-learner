@@ -1,6 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:malay/views/pages/login_page.dart'; // 用于退出登录跳转
+import 'package:malay/views/pages/login/login_page.dart'; // 用于退出登录跳转
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -88,7 +88,7 @@ class ProfilePage extends StatelessWidget {
             border: Border.all(color: Colors.white, width: 4),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withAlpha(12),
                 blurRadius: 10,
                 offset: const Offset(0, 5),
               ),

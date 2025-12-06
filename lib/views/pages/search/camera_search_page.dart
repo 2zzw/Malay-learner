@@ -143,12 +143,12 @@ class _CameraSearchPageState extends State<CameraSearchPage>
                         // 点击查看详情
                         onPressed: () {
                           Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WordDetailPage(),
-                            ),
-                          );
+                          // Navigator.push(
+                          //   context,
+                          //   MaterialPageRoute(
+                          //     builder: (context) => WordDetailPage(word: null),
+                          //   ),
+                          // );
                         },
                         child: const Text("View Detail"),
                       ),

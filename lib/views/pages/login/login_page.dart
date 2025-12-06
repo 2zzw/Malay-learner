@@ -15,7 +15,6 @@ class _LoginPageState extends State<LoginPage>
   late TabController _tabController;
   final AuthService _authService = AuthService();
 
-  // Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -40,13 +39,11 @@ class _LoginPageState extends State<LoginPage>
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
     try {
-      await _authService.signInWithEmail(
-        _emailController.text,
-        _passwordController.text,
-      );
-      debugPrint("Login successful: ${_emailController.text}");
+      // await _authService.signInWithEmail(
+      //   _emailController.text,
+      //   _passwordController.text,
+      // );
 
-      // Login successful, navigate and clear route stack
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const HomePage()),
@@ -79,15 +76,12 @@ class _LoginPageState extends State<LoginPage>
             'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
             fit: BoxFit.cover,
           ),
-          Container(
-            color: Colors.black.withValues(alpha: 0.3), // 稍微加深背景，突出文字
-          ),
+          Container(color: Colors.black.withValues(alpha: 0.3)),
 
           SafeArea(
             child: Column(
               children: [
                 const Spacer(flex: 1),
-                // Logo & Slogan
                 const Icon(
                   Icons.menu_book_rounded,
                   size: 64,
@@ -113,7 +107,6 @@ class _LoginPageState extends State<LoginPage>
                 ),
                 const Spacer(flex: 2),
 
-                // Login form area
                 Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
@@ -138,9 +131,8 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       const SizedBox(height: 24),
 
-                      // Form content
                       SizedBox(
-                        height: 180, // Fixed height to prevent jitter
+                        height: 180,
                         child: TabBarView(
                           controller: _tabController,
                           children: [_buildEmailForm(), _buildPhoneForm()],
@@ -149,7 +141,6 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 16),
 
-                      // Login button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -179,7 +170,6 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 16),
 
-                      // Sign up link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -202,7 +192,6 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 24),
 
-                      // Privacy policy
                       const Text(
                         "By continuing, you agree to our Terms of Service\nand Privacy Policy.",
                         textAlign: TextAlign.center,

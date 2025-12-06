@@ -1,35 +1,72 @@
 import 'package:flutter/material.dart';
-import '../word_detail_page.dart'; // 导入单词详情页
+import 'package:malay/views/pages/search/search_page.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../../data/word_model.dart';
+import '../../../views/pages/word_detail_page.dart';
 
-class WordListPage extends StatelessWidget {
-  final String bookTitle;
-
+class WordListPage extends StatefulWidget {
   const WordListPage({super.key, required this.bookTitle});
 
-  // 模拟单词列表
-  static const List<String> words = [
-    "delve",
-    "exact",
-    "exactly",
-    "elicit",
-    "traditional",
-    "lack",
-    "regent",
-    "burgeon",
-    "argue",
-    "arguably",
-    "barely",
-    "hierarchy",
-    "guidance",
-    "easy-going",
-    "makan",
-    "minum",
-  ];
+  final String bookTitle;
+
+  @override
+  State<WordListPage> createState() => _WordListPageState();
+}
+
+class _WordListPageState extends State<WordListPage> {
+  late final String bookTitle;
+  late Future<List<Word>> _searchResults;
+
+  Future<List<Word>> _fetchWords(String category) async {
+    String baseUrl = 'http://127.0.0.1:8000';
+    final url = Uri.parse('$baseUrl/words/category/$category');
+    final response = await http.get(url);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load words');
+    }
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => Word.fromJson(json)).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _searchResults = _fetchWords(widget.bookTitle);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Word>>(
+      future: _searchResults,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No words found'));
+        }
+
+        final words = snapshot.data!;
+
+        return WordListState(words: words);
+      },
+    );
+  }
+}
+
+class WordListState extends StatelessWidget {
+  final List<Word> words;
+
+  const WordListState({super.key, required this.words});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // 纯白背景
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -42,7 +79,7 @@ class WordListPage extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "$bookTitle Vocabulary",
+          words.isNotEmpty ? words[0].category : 'Vocabulary',
           style: const TextStyle(
             color: Colors.black87,
             fontSize: 16,
@@ -50,21 +87,23 @@ class WordListPage extends StatelessWidget {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Colors.black87),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.visibility_outlined, color: Colors.black87),
-            onPressed: () {},
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: const Icon(Icons.search, color: Colors.black87),
+        //     onPressed: () {
+
+        //     },
+        //   ),
+        //   IconButton(
+        //     icon: const Icon(Icons.visibility_outlined, color: Colors.black87),
+        //     onPressed: () {},
+        //   ),
+        // ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 列表头部信息 (如: Word List 1 94词)
+          // 列表头部信息
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Text(
@@ -86,16 +125,21 @@ class WordListPage extends StatelessWidget {
                     vertical: 4,
                   ),
                   title: Text(
-                    words[index],
+                    words[index].word,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600, // 稍微加粗，类似原图
+                      fontWeight: FontWeight.w600,
                       color: Colors.black87,
                     ),
                   ),
                   onTap: () {
-                    // 跳转到详情页
-                    _navigateToDetail(context, words[index]);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            WordDetailPage(word: words[index]),
+                      ),
+                    );
                   },
                 );
               },
@@ -103,30 +147,6 @@ class WordListPage extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _navigateToDetail(BuildContext context, String word) {
-    // 构造模拟数据跳转
-    final detailData = WordData(
-      word: word,
-      phonetic: "/.../",
-      simpleDefinition: "v. Definition of $word",
-      examples: [
-        ExampleData(
-          sentence: "Example sentence for $word.",
-          translation: "$word 的例句翻译。",
-          keyword: word,
-        ),
-      ],
-      phrases: [],
-    );
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => WordDetailPage(),
-      ), // 需传入 data: detailData
     );
   }
 }

@@ -3,30 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'camera_search_page.dart'; // 导入相机页
 import '../word_detail_page.dart'; // 导入详情页
-
-// =============================================================================
-// MOCK DATA (模拟词库)
-// =============================================================================
-class Word {
-  final String malay;
-  final String english;
-  final String category;
-
-  Word(this.malay, this.english, this.category);
-}
-
-final List<Word> mockVocabulary = [
-  Word("Selamat pagi", "Good morning", "Greeting"),
-  Word("Terima kasih", "Thank you", "Greeting"),
-  Word("Apa khabar", "How are you?", "Greeting"),
-  Word("Makan", "Eat", "Verb"),
-  Word("Minum", "Drink", "Verb"),
-  Word("Rumah", "House", "Noun"),
-  Word("Kereta", "Car", "Noun"),
-  Word("Cantik", "Beautiful", "Adjective"),
-  Word("Cinta", "Love", "Noun"),
-  Word("Buku", "Book", "Noun"),
-];
+import '../../../data/word_model.dart';
 
 // =============================================================================
 // SEARCH PAGE UI
@@ -47,24 +24,31 @@ class _SearchPageState extends State<SearchPage> {
   void initState() {
     super.initState();
     // 初始显示全部或最近搜索（这里模拟为空或全部）
-    _searchResults = mockVocabulary;
+    _searchResults = [];
   }
 
   void _onSearchChanged(String query) {
     setState(() {
       _isSearching = query.isNotEmpty;
       if (query.isEmpty) {
-        _searchResults = mockVocabulary;
+        _searchResults = [];
       } else {
-        _searchResults = mockVocabulary
-            .where(
-              (word) =>
-                  word.malay.toLowerCase().contains(query.toLowerCase()) ||
-                  word.english.toLowerCase().contains(query.toLowerCase()),
-            )
-            .toList();
+        _searchResults = [];
+        // TODO: Implement actual search logic using _fetchWords or similar
+        // For now, keeping it empty as we're not fetching data yet
       }
     });
+  }
+
+  List<Word> _filterWords(String query) {
+    return _searchResults
+        .where(
+          (word) =>
+              word.word.toLowerCase().contains(query.toLowerCase()) ||
+              word.english.toLowerCase().contains(query.toLowerCase()) ||
+              word.category.toLowerCase().contains(query.toLowerCase()),
+        )
+        .toList();
   }
 
   @override
@@ -170,7 +154,7 @@ class _SearchPageState extends State<SearchPage> {
                           horizontal: 8,
                         ),
                         title: Text(
-                          word.malay,
+                          word.word,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
@@ -189,7 +173,7 @@ class _SearchPageState extends State<SearchPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => WordDetailPage(),
+                              builder: (context) => WordDetailPage(word: word),
                             ),
                           );
                         },
