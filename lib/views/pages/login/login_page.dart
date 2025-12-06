@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../service/Auth.dart';
-import '../../views/pages/home_page.dart';
+import 'package:malay/views/pages/login/register_page.dart';
+import '../../../service/Auth.dart';
+import '../home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -36,25 +37,27 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  // 登录逻辑
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
     try {
-      // 这里调用 AuthService
-      // await _authService.signInWithEmail(_emailController.text, _passwordController.text);
-
-      // 模拟成功，跳转首页
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return;
-
-      // 登录成功，跳转并清空路由栈
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePage()),
+      await _authService.signInWithEmail(
+        _emailController.text,
+        _passwordController.text,
       );
+      debugPrint("Login successful: ${_emailController.text}");
+
+      // Login successful, navigate and clear route stack
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Login Failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Login Failed: $e")));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -72,16 +75,14 @@ class _LoginPageState extends State<LoginPage>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. 背景层 (复用首页风格，保持一致性)
           Image.network(
             'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
             fit: BoxFit.cover,
           ),
           Container(
-            color: Colors.black.withOpacity(0.3), // 稍微加深背景，突出文字
+            color: Colors.black.withValues(alpha: 0.3), // 稍微加深背景，突出文字
           ),
 
-          // 2. 内容层
           SafeArea(
             child: Column(
               children: [
@@ -112,7 +113,7 @@ class _LoginPageState extends State<LoginPage>
                 ),
                 const Spacer(flex: 2),
 
-                // 登录表单区域
+                // Login form area
                 Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
@@ -125,7 +126,6 @@ class _LoginPageState extends State<LoginPage>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 登录方式切换
                       TabBar(
                         controller: _tabController,
                         labelColor: Colors.teal,
@@ -138,9 +138,9 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       const SizedBox(height: 24),
 
-                      // 表单内容
+                      // Form content
                       SizedBox(
-                        height: 180, // 固定高度防止抖动
+                        height: 180, // Fixed height to prevent jitter
                         child: TabBarView(
                           controller: _tabController,
                           children: [_buildEmailForm(), _buildPhoneForm()],
@@ -149,7 +149,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 16),
 
-                      // 登录按钮
+                      // Login button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -179,7 +179,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 16),
 
-                      // 注册入口
+                      // Sign up link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -202,7 +202,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 24),
 
-                      // 隐私协议
+                      // Privacy policy
                       const Text(
                         "By continuing, you agree to our Terms of Service\nand Privacy Policy.",
                         textAlign: TextAlign.center,
@@ -303,68 +303,6 @@ class _LoginPageState extends State<LoginPage>
           ),
         ),
       ],
-    );
-  }
-}
-
-// 简单的注册页面
-class RegisterPage extends StatelessWidget {
-  const RegisterPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Account")),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            TextField(
-              decoration: InputDecoration(
-                labelText: "Full Name",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () {
-                  // 注册逻辑...
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text("REGISTER"),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

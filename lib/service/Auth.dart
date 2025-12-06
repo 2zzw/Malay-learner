@@ -1,47 +1,72 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
-// =============================================================================
-// AUTH SERVICE (Backend Logic)
-// =============================================================================
-
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // 模拟模式：如果你还没有配置 firebase_options.dart，设为 true 以测试 UI
-  static const bool _mockMode = true; 
-
-  // Stream 用于监听用户登录状态变化
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // 邮箱登录
+  // Sign in with email
   Future<UserCredential?> signInWithEmail(String email, String password) async {
-    if (_mockMode) {
-      await Future.delayed(const Duration(seconds: 1)); // 模拟网络延迟
-      return null; // 模拟成功，实际返回 null 因为没有真实 User
-    }
     try {
-      return await _auth.signInWithEmailAndPassword(email: email, password: password);
-    } catch (e) {
-      rethrow;
+      return await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Sign in failed';
+
+      switch (e.code) {
+        case 'invalid-credential':
+          errorMessage = 'email or password is incorrect';
+          break;
+        case 'user-not-found':
+          errorMessage = 'email not found';
+          break;
+        case 'wrong-password':
+          errorMessage = 'password is incorrect';
+          break;
+        case 'user-disabled':
+          errorMessage = 'account is disabled';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'too many requests, please try again later';
+          break;
+        default:
+          errorMessage = 'An error occurred: ${e.message ?? e.toString()}';
+      }
+      throw Exception(errorMessage);
     }
   }
 
-  // 注册
+  // Sign up
   Future<UserCredential?> signUp(String email, String password) async {
-    if (_mockMode) {
-      await Future.delayed(const Duration(seconds: 1));
-      return null;
-    }
     try {
-      return await _auth.createUserWithEmailAndPassword(email: email, password: password);
-    } catch (e) {
-      rethrow;
+      return await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Sign up failed';
+
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage = 'Email is already in use';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email format';
+          break;
+        case 'weak-password':
+          errorMessage = 'Password is too weak';
+          break;
+        default:
+          errorMessage = 'An error occurred: ${e.message ?? e.toString()}';
+      }
+      throw Exception(errorMessage);
     }
   }
 
-  // 退出登录
+  // Sign out
   Future<void> signOut() async {
-    if (_mockMode) return;
     await _auth.signOut();
   }
 }
