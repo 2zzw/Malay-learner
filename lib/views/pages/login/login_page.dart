@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/pages/login/register_page.dart';
+import 'package:provider/provider.dart';
 import '../../../service/Auth.dart';
 import '../home_page.dart';
 
@@ -68,14 +70,12 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           Container(color: Colors.black.withValues(alpha: 0.3)),
 
           SafeArea(

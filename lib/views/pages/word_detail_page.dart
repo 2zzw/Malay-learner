@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/data/theme_provider.dart';
+import 'package:provider/provider.dart';
 import '../../../data/word_model.dart';
 
 class WordDetailPage extends StatefulWidget {
@@ -21,6 +23,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -45,10 +48,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
             child: Container(color: Colors.white.withValues(alpha: 0.6)),

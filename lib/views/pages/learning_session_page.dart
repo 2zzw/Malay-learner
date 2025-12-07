@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/data/theme_provider.dart';
+import 'package:provider/provider.dart';
 
 // =============================================================================
 // 1. MODELS & ENUMS
@@ -143,6 +145,8 @@ class _LearningSessionPageState extends State<LearningSessionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
+
     if (_isSessionFinished) {
       return _buildFinishView();
     }
@@ -179,10 +183,7 @@ class _LearningSessionPageState extends State<LearningSessionPage> {
         fit: StackFit.expand,
         children: [
           // 背景
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
             child: Container(color: Colors.white.withOpacity(0.92)),

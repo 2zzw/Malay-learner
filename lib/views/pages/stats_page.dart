@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/data/theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class StudyStats {
   final int todayWords;
@@ -33,6 +35,7 @@ class StatsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -51,10 +54,7 @@ class StatsPage extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(color: Colors.white.withValues(alpha: 0.6)),

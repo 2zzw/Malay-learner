@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:malay/views/pages/search/search_page.dart';
 import 'package:malay/views/pages/vocabulary/vocabulary_book_page.dart';
 import 'package:malay/views/pages/stats_page.dart';
-import 'package:malay/views/pages/profile_page.dart';
+import 'package:malay/views/pages/profile/profile_page.dart';
 import 'package:malay/views/pages/learning_session_page.dart';
 import 'package:malay/views/pages/ai_assistant_page.dart';
+import 'package:malay/data/theme_provider.dart';
+import 'package:provider/provider.dart';
 
 // =============================================================================
 // 2. MODELS
@@ -468,13 +470,15 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
+
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
           // 1. 背景层
           Image.network(
-            _content.imageUrl,
+            bgUrl,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) =>
                 Container(color: Colors.grey.shade300),
@@ -486,9 +490,9 @@ class _HomePageState extends State<HomePage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.white.withOpacity(0.1),
+                  Colors.white.withValues(alpha: 0.1),
                   Colors.transparent,
-                  Colors.black.withOpacity(0.05),
+                  Colors.black.withValues(alpha: 0.05),
                 ],
               ),
             ),

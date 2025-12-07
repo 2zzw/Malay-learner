@@ -1,6 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:malay/data/theme_provider.dart';
+import 'package:provider/provider.dart';
 import 'camera_search_page.dart'; // 导入相机页
 import '../word_detail_page.dart'; // 导入详情页
 import '../../../data/word_model.dart';
@@ -53,6 +55,7 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -71,10 +74,7 @@ class _SearchPageState extends State<SearchPage> {
         fit: StackFit.expand,
         children: [
           // 1. 背景层：高模糊处理，保证文字可读性
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(color: Colors.white.withOpacity(0.85)),

@@ -1,12 +1,16 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:malay/views/pages/login/login_page.dart'; // 用于退出登录跳转
+import 'package:malay/data/theme_provider.dart';
+import 'package:malay/views/pages/login/login_page.dart';
+import 'package:malay/views/pages/profile/appearance_page.dart';
+import 'package:provider/provider.dart'; // 用于退出登录跳转
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -28,10 +32,7 @@ class ProfilePage extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           // 1. 背景层 (保持 App 统一调性)
-          Image.network(
-            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-          ),
+          Image.network(bgUrl, fit: BoxFit.cover),
           // 叠加层：使背景变淡，让前台内容清晰
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
@@ -232,7 +233,12 @@ class ProfilePage extends StatelessWidget {
             icon: Icons.palette_outlined,
             color: Colors.teal,
             title: "Appearance", // 外观修改
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AppearancePage()),
+              );
+            },
           ),
           _buildDivider(),
           _buildListItem(
