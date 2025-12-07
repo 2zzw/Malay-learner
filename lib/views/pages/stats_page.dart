@@ -1,10 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-// =============================================================================
-// MOCK DATA
-// =============================================================================
-
 class StudyStats {
   final int todayWords;
   final int totalWords;
@@ -24,17 +20,13 @@ class StudyStats {
 }
 
 final mockStats = StudyStats(
-  todayWords: 15,
-  totalWords: 193,
-  todayMinutes: 9,
-  totalMinutes: 1198,
-  streakDays: 11,
-  weekStreak: [true, true, true, true, false, false, false], // Mon-Sun status
+  todayWords: 5,
+  totalWords: 42,
+  todayMinutes: 8,
+  totalMinutes: 36,
+  streakDays: 2,
+  weekStreak: [true, true, false, false, false, false, false], // Mon-Sun status
 );
-
-// =============================================================================
-// STATS PAGE UI
-// =============================================================================
 
 class StatsPage extends StatelessWidget {
   const StatsPage({super.key});
@@ -48,41 +40,36 @@ class StatsPage extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          "Dashboard", // 对应“仪表盘”
+          "Dashboard",
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
-        // 按照要求：不要分享按钮
       ),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. 背景层 (保持 App 统一调性)
           Image.network(
             'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
             fit: BoxFit.cover,
           ),
-          // 叠加层：使背景变淡，让白色卡片更突出
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(color: Colors.white.withOpacity(0.6)),
+            child: Container(color: Colors.white.withValues(alpha: 0.6)),
           ),
 
-          // 2. 内容层
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 标题：正在学习
                   const Padding(
                     padding: EdgeInsets.only(left: 4, bottom: 12),
                     child: Text(
-                      "Currently Learning", // 正在学习
+                      "Currently Learning",
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -91,16 +78,13 @@ class StatsPage extends StatelessWidget {
                     ),
                   ),
 
-                  // 卡片 1：正在学习的书籍
                   _buildCurrentLearningCard(),
 
-                  const SizedBox(height: 32),
-
-                  // 标题：我的数据
+                  const SizedBox(height: 20),
                   const Padding(
                     padding: EdgeInsets.only(left: 4, bottom: 12),
                     child: Text(
-                      "My Statistics", // 我的数据
+                      "My Statistics", // My Statistics
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -109,12 +93,10 @@ class StatsPage extends StatelessWidget {
                     ),
                   ),
 
-                  // 卡片 2：概览数据 (四宫格)
                   _buildOverviewCard(),
 
                   const SizedBox(height: 16),
 
-                  // 卡片 3：日历签到
                   _buildCalendarCard(),
 
                   const SizedBox(height: 20),
@@ -129,7 +111,6 @@ class StatsPage extends StatelessWidget {
 
   // --- WIDGETS ---
 
-  // 1. 正在学习卡片
   Widget _buildCurrentLearningCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -140,7 +121,6 @@ class StatsPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 书籍封面
               Container(
                 width: 80,
                 height: 110,
@@ -157,7 +137,7 @@ class StatsPage extends StatelessWidget {
                   image: const DecorationImage(
                     image: NetworkImage(
                       "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Claude_Monet_-_Woman_with_a_Parasol_-_Madame_Monet_and_Her_Son_-_National_Gallery_of_Art.jpg/1200px-Claude_Monet_-_Woman_with_a_Parasol_-_Madame_Monet_and_Her_Son_-_National_Gallery_of_Art.jpg",
-                    ), // 模拟封面
+                    ),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -165,7 +145,7 @@ class StatsPage extends StatelessWidget {
                   alignment: Alignment.center,
                   color: Colors.black26,
                   child: const Text(
-                    "Malay\nLevel 1",
+                    "Malay\nBasic",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
@@ -176,13 +156,12 @@ class StatsPage extends StatelessWidget {
               ),
               const SizedBox(width: 16),
 
-              // 右侧信息（这里简化，不放添加按钮，保持整洁）
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Bahasa Melayu Asas",
+                      "Malay Basic",
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -198,7 +177,7 @@ class StatsPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          "Vocabulary Book 40",
+                          "Vocabulary Book",
                           style: TextStyle(color: Colors.grey.shade600),
                         ),
                       ],
@@ -211,7 +190,6 @@ class StatsPage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // 进度条区域
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -229,7 +207,7 @@ class StatsPage extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: 92 / 4494, // 模拟进度
+              value: 5 / 100, // 5% progress
               backgroundColor: Colors.grey.shade200,
               color: Colors.orange,
               minHeight: 6,
@@ -240,11 +218,11 @@ class StatsPage extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Learned 92",
+                "Learned 5 items",
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
               Text(
-                "Total 4494",
+                "Total 100 items",
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
             ],
@@ -254,7 +232,6 @@ class StatsPage extends StatelessWidget {
     );
   }
 
-  // 2. 概览数据卡片 (四宫格)
   Widget _buildOverviewCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -278,7 +255,6 @@ class StatsPage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // 第一行数据
           Row(
             children: [
               Expanded(
@@ -303,7 +279,6 @@ class StatsPage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // 第二行数据
           Row(
             children: [
               Expanded(
@@ -380,7 +355,6 @@ class StatsPage extends StatelessWidget {
     );
   }
 
-  // 3. 日历签到卡片
   Widget _buildCalendarCard() {
     const weekDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
@@ -415,9 +389,8 @@ class StatsPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: List.generate(7, (index) {
-              // 模拟：前4天签到，第5天是今天(Today)
-              final isToday = index == 4;
-              final isChecked = index < 4;
+              final isToday = index == 2;
+              final isChecked = index < 2;
 
               return Column(
                 children: [
@@ -475,14 +448,13 @@ class StatsPage extends StatelessWidget {
     );
   }
 
-  // 通用卡片样式：高不透明度的白色毛玻璃，模仿截图中的干净白卡片
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
-      color: Colors.white.withOpacity(0.9), // 接近纯白，但保留一点点透光
+      color: Colors.white.withValues(alpha: 0.9), // 接近纯白，但保留一点点透光
       borderRadius: BorderRadius.circular(20),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withValues(alpha: 0.05),
           blurRadius: 15,
           offset: const Offset(0, 5),
         ),
