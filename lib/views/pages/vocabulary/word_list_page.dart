@@ -1,32 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:malay/views/pages/search/search_page.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+// 1. 导入你的 DatabaseHelper 和 Word 模型
+import '../../../data/database_helper.dart'; // 请确保路径正确
 import '../../../data/word_model.dart';
 import '../../../views/pages/word_detail_page.dart';
 
 class WordListPage extends StatefulWidget {
   const WordListPage({super.key, required this.bookTitle});
 
-  final String bookTitle;
+  final String bookTitle; // 这里就是 category
 
   @override
   State<WordListPage> createState() => _WordListPageState();
 }
 
 class _WordListPageState extends State<WordListPage> {
-  late final String bookTitle;
   late Future<List<Word>> _searchResults;
 
+  // 修改：从 SQLite 获取数据
   Future<List<Word>> _fetchWords(String category) async {
-    String baseUrl = 'http://127.0.0.1:8000';
-    final url = Uri.parse('$baseUrl/words/category/$category');
-    final response = await http.get(url);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load words');
-    }
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Word.fromJson(json)).toList();
+    // 调用我们在 DatabaseHelper 里新写的方法
+    return await DatabaseHelper().getWordsByCategory(category);
   }
 
   @override
@@ -44,10 +37,15 @@ class _WordListPageState extends State<WordListPage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Text('Error: ${snapshot.error}'),
+            ),
+          );
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No words found'));
+          return const Center(child: Text('No words found in this category'));
         }
 
         final words = snapshot.data!;
@@ -58,6 +56,7 @@ class _WordListPageState extends State<WordListPage> {
   }
 }
 
+// WordListState 保持原样，没有任何逻辑需要改动
 class WordListState extends StatelessWidget {
   final List<Word> words;
 
@@ -87,32 +86,17 @@ class WordListState extends StatelessWidget {
           ),
         ),
         centerTitle: true,
-        // actions: [
-        //   IconButton(
-        //     icon: const Icon(Icons.search, color: Colors.black87),
-        //     onPressed: () {
-
-        //     },
-        //   ),
-        //   IconButton(
-        //     icon: const Icon(Icons.visibility_outlined, color: Colors.black87),
-        //     onPressed: () {},
-        //   ),
-        // ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 列表头部信息
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Text(
-              "Word List 1  ·  ${words.length} words",
+              "Word List · ${words.length} words",
               style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
             ),
           ),
-
-          // 单词列表
           Expanded(
             child: ListView.separated(
               itemCount: words.length,

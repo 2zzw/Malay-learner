@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:provider/provider.dart';
-import 'camera_search_page.dart'; // 导入相机页
+import './camera_search_page.dart'; // 导入相机页
 import '../word_detail_page.dart'; // 导入详情页
 import '../../../data/word_model.dart';
 
@@ -122,8 +122,8 @@ class _SearchPageState extends State<SearchPage> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) =>
-                                        const CameraSearchPage(),
+                                    builder: (context) => const CameraOcrPage(),
+                                    fullscreenDialog: true,
                                   ),
                                 );
                               },
