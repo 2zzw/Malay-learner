@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../data/word_model.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class WordDetailPage extends StatefulWidget {
   final Word word;
@@ -15,10 +16,46 @@ class WordDetailPage extends StatefulWidget {
 
 class _WordDetailPageState extends State<WordDetailPage> {
   late final Word word;
+  late FlutterTts? flutterTts;
+
   @override
   void initState() {
     super.initState();
     word = widget.word;
+    initTts(); // 初始化TTS
+  }
+
+  // 3. 初始化配置
+  Future<void> initTts() async {
+    flutterTts = FlutterTts();
+
+    // 设置语言为马来语 (Malaysia)
+    // 如果手机没有马来语包，它可能会回退到默认语言，建议用户在手机设置里下载语音包
+    await flutterTts?.setLanguage("ms-MY");
+
+    // 可选：设置语速 (0.0 ~ 1.0)
+    await flutterTts?.setSpeechRate(0.5);
+
+    // 可选：设置音量 (0.0 ~ 1.0)
+    await flutterTts?.setVolume(1.0);
+
+    // iOS 特殊处理：确保在静音模式下也能发声
+    await flutterTts?.setIosAudioCategory(
+      IosTextToSpeechAudioCategory.playback,
+      [IosTextToSpeechAudioCategoryOptions.defaultToSpeaker],
+    );
+  }
+
+  @override
+  void dispose() {
+    flutterTts?.stop(); // 页面销毁时停止播放
+    super.dispose();
+  }
+
+  // 4. 发音函数
+  Future<void> _speak(String text) async {
+    // 这里的 word.text 是你要读的单词
+    await flutterTts?.speak(text);
   }
 
   @override
@@ -98,32 +135,41 @@ class _WordDetailPageState extends State<WordDetailPage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    "MY",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black54,
+            InkWell(
+              // 5. 用 InkWell 或 GestureDetector 包裹你的 Container
+              onTap: () => _speak(word.word), // 点击调用发音
+              borderRadius: BorderRadius.circular(20), // 只有 InkWell 需要这个来适配圆角
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "MY",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.volume_up_rounded,
-                    size: 16,
-                    color: Colors.black.withValues(alpha: 0.6),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.volume_up_rounded,
+                      size: 16,
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
+                  ],
+                ),
               ),
             ),
+
             const SizedBox(width: 12),
             Text(
               word.phonetic,
@@ -239,15 +285,20 @@ class _WordDetailPageState extends State<WordDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            style: const TextStyle(
-              fontSize: 18,
-              color: Colors.black87,
-              height: 1.4,
-              fontFamily: 'San Francisco',
+        InkWell(
+          // 5. 用 InkWell 或 GestureDetector 包裹你的 Container
+          onTap: () => _speak(sentence['malay']), // 点击调用发音
+          borderRadius: BorderRadius.circular(20),
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                fontSize: 18,
+                color: Colors.black87,
+                height: 1.4,
+                fontFamily: 'San Francisco',
+              ),
+              children: _highlightKeyword(sentence['malay']!, word.word),
             ),
-            children: _highlightKeyword(sentence['malay']!, word.word),
           ),
         ),
         const SizedBox(height: 6),
@@ -293,12 +344,17 @@ class _WordDetailPageState extends State<WordDetailPage> {
                   vertical: 0,
                 ),
                 minLeadingWidth: 10,
-                title: Text(
-                  phrase['phrase']!,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.black87,
+                title: InkWell(
+                  // 5. 用 InkWell 或 GestureDetector 包裹你的 Container
+                  onTap: () => _speak(phrase['phrase']), // 点击调用发音
+                  borderRadius: BorderRadius.circular(20),
+                  child: Text(
+                    phrase['phrase']!,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
                 subtitle: Column(
