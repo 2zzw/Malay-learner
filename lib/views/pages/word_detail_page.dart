@@ -4,7 +4,7 @@ import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../data/word_model.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../../data/tts_helper.dart';
 
 class WordDetailPage extends StatefulWidget {
   final Word word;
@@ -17,7 +17,6 @@ class WordDetailPage extends StatefulWidget {
 
 class _WordDetailPageState extends State<WordDetailPage> {
   late final Word word;
-  late FlutterTts? flutterTts;
   bool isBookmarked = false;
 
   @override
@@ -25,7 +24,6 @@ class _WordDetailPageState extends State<WordDetailPage> {
     super.initState();
     word = widget.word;
     _checkFavoriteStatus();
-    initTts(); // 初始化TTS
   }
 
   Future<void> _checkFavoriteStatus() async {
@@ -40,37 +38,16 @@ class _WordDetailPageState extends State<WordDetailPage> {
     }
   }
 
-  // 3. 初始化配置
-  Future<void> initTts() async {
-    flutterTts = FlutterTts();
-
-    // 设置语言为马来语 (Malaysia)
-    // 如果手机没有马来语包，它可能会回退到默认语言，建议用户在手机设置里下载语音包
-    await flutterTts?.setLanguage("ms-MY");
-
-    // 可选：设置语速 (0.0 ~ 1.0)
-    await flutterTts?.setSpeechRate(0.5);
-
-    // 可选：设置音量 (0.0 ~ 1.0)
-    await flutterTts?.setVolume(1.0);
-
-    // iOS 特殊处理：确保在静音模式下也能发声
-    await flutterTts?.setIosAudioCategory(
-      IosTextToSpeechAudioCategory.playback,
-      [IosTextToSpeechAudioCategoryOptions.defaultToSpeaker],
-    );
-  }
-
   @override
   void dispose() {
-    flutterTts?.stop(); // 页面销毁时停止播放
+    TtsHelper().stop(); // 页面销毁时停止播放
     super.dispose();
   }
 
   // 4. 发音函数
   Future<void> _speak(String text) async {
     // 这里的 word.text 是你要读的单词
-    await flutterTts?.speak(text);
+    await TtsHelper().speak(text);
   }
 
   Future<void> _toggleFavorite() async {

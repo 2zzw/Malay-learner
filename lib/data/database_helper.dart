@@ -104,15 +104,57 @@ class DatabaseHelper {
   }
 
   // 获取某个单词的详细信息
-  Future<Map<String, dynamic>?> getWordDetail(String exactWord) async {
+  Future<Word?> getWordDetail(String exactWord) async {
     final db = await database;
-    List<Map<String, dynamic>> results = await db.query(
+    final List<Map<String, dynamic>> maps = await db.query(
       "words",
-      where: "word = ?",
+      where: "malay_word = ?",
       whereArgs: [exactWord],
       limit: 1,
     );
-    return results.isNotEmpty ? results.first : null;
+
+    // 1. 创建一个可修改的副本 (Map 从数据库读出来通常是只读的)
+    final mutableMap = Map<String, dynamic>.from(maps[0]);
+
+    // 2. 处理 JSON 字段：SQLite 取出来是 String，需要解码
+    // 如果 sentences 字段存在且是字符串，尝试解码
+    if (mutableMap['sentences'] != null && mutableMap['sentences'] is String) {
+      try {
+        mutableMap['sentences'] = jsonDecode(mutableMap['sentences']);
+      } catch (e) {
+        print('Error decoding sentences: $e');
+        mutableMap['sentences'] = [];
+      }
+    }
+
+    // 如果 collocations 字段存在且是字符串，尝试解码
+    if (mutableMap['collocations'] != null &&
+        mutableMap['collocations'] is String) {
+      try {
+        mutableMap['collocations'] = jsonDecode(mutableMap['collocations']);
+      } catch (e) {
+        print('Error decoding collocations: $e');
+        mutableMap['collocations'] = [];
+      }
+    }
+
+    // 3. ⚠️ 字段名兼容处理 (非常重要)
+    // 你的 Word.fromJson 找的是 'malay_word'，但数据库字段可能是 'word'
+    // 这里做一个手动映射，防止数据取不到
+    if (!mutableMap.containsKey('malay_word') &&
+        mutableMap.containsKey('word')) {
+      mutableMap['malay_word'] = mutableMap['word'];
+    }
+    if (!mutableMap.containsKey('english_meaning') &&
+        mutableMap.containsKey('meaning')) {
+      // 假设数据库里的 meaning 对应 english_meaning，或者是结构体
+      // 如果 meaning 也是 JSON 字符串，记得像上面一样 decode
+      // mutableMap['english_meaning'] = mutableMap['meaning'];
+    }
+
+    // 4. 转换为 Word 对象
+    return Word.fromJson(mutableMap);
+    // return results.isNotEmpty ? results.first : null;
   }
 
   // 获取所有词书（其实就是按 category 分组统计）
@@ -251,6 +293,54 @@ class DatabaseHelper {
       }
 
       // 4. 转换为 Word 对象
+      return Word.fromJson(mutableMap);
+    }).toList();
+  }
+
+  // --- 多语言搜索功能 ---
+  Future<List<Word>> searchByKeyword(String query) async {
+    final db = await database;
+
+    // 使用 OR 逻辑同时查询三个字段
+    // %query% 表示模糊匹配（包含即可，不用完全相等）
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT * FROM words 
+      WHERE malay_word LIKE ? 
+      OR english_meaning LIKE ? 
+      OR chinese_meaning LIKE ?
+      LIMIT 50
+    ''',
+      ['%$query%', '%$query%', '%$query%'],
+    );
+
+    // 将数据库结果转换为 Word 对象列表
+    return maps.map((map) {
+      final mutableMap = Map<String, dynamic>.from(map);
+
+      // 处理 JSON 字符串解码 (为了防止解析错误，加上 try-catch)
+      if (mutableMap['sentences'] != null &&
+          mutableMap['sentences'] is String) {
+        try {
+          mutableMap['sentences'] = jsonDecode(mutableMap['sentences']);
+        } catch (e) {
+          mutableMap['sentences'] = [];
+        }
+      }
+      if (mutableMap['collocations'] != null &&
+          mutableMap['collocations'] is String) {
+        try {
+          mutableMap['collocations'] = jsonDecode(mutableMap['collocations']);
+        } catch (e) {
+          mutableMap['collocations'] = [];
+        }
+      }
+      // 兼容旧字段名
+      if (!mutableMap.containsKey('malay_word') &&
+          mutableMap.containsKey('word')) {
+        mutableMap['malay_word'] = mutableMap['word'];
+      }
+
       return Word.fromJson(mutableMap);
     }).toList();
   }

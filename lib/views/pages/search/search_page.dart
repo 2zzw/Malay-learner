@@ -1,15 +1,13 @@
+import 'dart:async'; // 1. 引入 Timer 需要的库
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:malay/data/theme_provider.dart';
 import 'package:provider/provider.dart';
-import './camera_search_page.dart'; // 导入相机页
-import '../word_detail_page.dart'; // 导入详情页
+import 'package:malay/data/theme_provider.dart';
+import './camera_search_page.dart';
+import '../word_detail_page.dart';
 import '../../../data/word_model.dart';
+import '../../../data/database_helper.dart'; // 2. 引入数据库帮助类
 
-// =============================================================================
-// SEARCH PAGE UI
-// =============================================================================
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -20,42 +18,52 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<Word> _searchResults = [];
-  bool _isSearching = false;
+  bool _isLoading = false; // 增加加载状态
+  Timer? _debounce; // 3. 定义防抖计时器
 
   @override
-  void initState() {
-    super.initState();
-    // 初始显示全部或最近搜索（这里模拟为空或全部）
-    _searchResults = [];
+  void dispose() {
+    _debounce?.cancel(); // 页面销毁时记得关掉计时器
+    _searchController.dispose();
+    super.dispose();
   }
 
+  // 4. 核心搜索逻辑
   void _onSearchChanged(String query) {
-    setState(() {
-      _isSearching = query.isNotEmpty;
+    // 如果之前的计时器还在跑，就取消它（说明用户又打字了）
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    // 启动一个新的计时器，300ms 后执行查询
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
       if (query.isEmpty) {
-        _searchResults = [];
-      } else {
-        _searchResults = [];
-        // TODO: Implement actual search logic using _fetchWords or similar
-        // For now, keeping it empty as we're not fetching data yet
+        setState(() {
+          _searchResults = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoading = true; // 显示加载圈
+      });
+
+      // 调用数据库查询
+      List<Word> results = await DatabaseHelper().searchByKeyword(query);
+
+      // 更新 UI
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isLoading = false;
+        });
       }
     });
-  }
-
-  List<Word> _filterWords(String query) {
-    return _searchResults
-        .where(
-          (word) =>
-              word.word.toLowerCase().contains(query.toLowerCase()) ||
-              word.english.toLowerCase().contains(query.toLowerCase()) ||
-              word.category.toLowerCase().contains(query.toLowerCase()),
-        )
-        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -73,7 +81,7 @@ class _SearchPageState extends State<SearchPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. 背景层：高模糊处理，保证文字可读性
+          // 1. 背景层
           Image.network(bgUrl, fit: BoxFit.cover),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -105,28 +113,47 @@ class _SearchPageState extends State<SearchPage> {
                         ),
                         child: TextField(
                           controller: _searchController,
-                          onChanged: _onSearchChanged,
+                          onChanged: _onSearchChanged, // 绑定上面的搜索函数
+                          autofocus: true, // 建议进入页面自动弹出键盘
                           decoration: InputDecoration(
-                            hintText: "Search Malay or English...",
+                            hintText: "Search Malay / English / 中文...",
                             hintStyle: TextStyle(color: Colors.grey.shade400),
                             prefixIcon: const Icon(
                               Icons.search,
                               color: Colors.teal,
                             ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(
-                                Icons.camera_alt_rounded,
-                                color: Colors.teal,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const CameraOcrPage(),
-                                    fullscreenDialog: true,
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 如果有内容，显示清空按钮
+                                if (_searchController.text.isNotEmpty)
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Colors.grey,
+                                    ),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _onSearchChanged('');
+                                    },
                                   ),
-                                );
-                              },
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    color: Colors.teal,
+                                  ),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const CameraOcrPage(),
+                                        fullscreenDialog: true,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
@@ -142,44 +169,76 @@ class _SearchPageState extends State<SearchPage> {
 
                 // 结果列表
                 Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: _searchResults.length,
-                    separatorBuilder: (ctx, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final word = _searchResults[index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 8,
-                        ),
-                        title: Text(
-                          word.word,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _searchResults.isEmpty &&
+                            _searchController.text.isNotEmpty
+                      ? Center(
+                          child: Text(
+                            "No words found",
+                            style: TextStyle(color: Colors.grey.shade600),
                           ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: _searchResults.length,
+                          separatorBuilder: (ctx, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final word = _searchResults[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 8,
+                                horizontal: 8,
+                              ),
+                              title: RichText(
+                                text: TextSpan(
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 18,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: word.word,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const TextSpan(text: "  "),
+                                    TextSpan(
+                                      text: word.phonetic, // 加上音标更专业
+                                      style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                        fontSize: 14,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              subtitle: Text(
+                                "${word.chinese} · ${word.english}", // 同时显示中文和英文含义
+                                style: TextStyle(color: Colors.grey.shade600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color: Colors.grey.shade300,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        WordDetailPage(word: word),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
-                        subtitle: Text(
-                          word.english,
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 14,
-                          color: Colors.grey.shade300,
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WordDetailPage(word: word),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
                 ),
               ],
             ),

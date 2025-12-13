@@ -5,7 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
-import 'package:image_picker/image_picker.dart'; // 图片处理库
+import 'package:image_picker/image_picker.dart';
+import 'package:malay/data/word_model.dart';
+import 'package:malay/views/pages/word_detail_page.dart';
+import 'package:translator/translator.dart'; // 图片处理库
+import '../../../data/database_helper.dart';
+import '../../../data/tts_helper.dart';
 
 class CameraOcrPage extends StatefulWidget {
   const CameraOcrPage({super.key});
@@ -16,13 +21,14 @@ class CameraOcrPage extends StatefulWidget {
 
 class _CameraOcrPageState extends State<CameraOcrPage> {
   CameraController? _controller;
+  final translator = GoogleTranslator();
   final ImagePicker _picker = ImagePicker();
   bool _isCameraInitialized = false;
   bool _isProcessing = false;
 
   // 🔴 替换你的百度 API Key
-  final String _apiKey = "你的BAIDU_API_KEY";
-  final String _secretKey = "你的BAIDU_SECRET_KEY";
+  final String _apiKey = "5xrVbswskRM8RcBFteZCJ8dR";
+  final String _secretKey = "PXtcKUPC2MtIzRUdpo3jnWjuzZZLbMyr";
   String? _baiduToken;
 
   @override
@@ -30,6 +36,18 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
     super.initState();
     _initCamera();
     _fetchBaiduToken();
+  }
+
+  @override
+  void dispose() {
+    TtsHelper().stop(); // 页面销毁时停止播放
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _speak(String text) async {
+    // 这里的 word.text 是你要读的单词
+    await TtsHelper().speak(text);
   }
 
   Future<void> _initCamera() async {
@@ -93,8 +111,6 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
   Future<void> _onGalleryPressed() async {
     if (_isProcessing) return;
 
-    setState(() => _isProcessing = true);
-
     try {
       final XFile? photo = await _picker.pickImage(source: ImageSource.gallery);
       if (photo != null) {
@@ -107,7 +123,6 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
       }
     } catch (e) {
       _showToast("选图错误: $e");
-      setState(() => _isProcessing = false);
     }
   }
 
@@ -122,9 +137,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
 
       if (recognizedWord != null && recognizedWord.isNotEmpty) {
         // 3. 模拟后端查词
-        Map<String, dynamic> wordInfo = await _mockFetchWordInfoFromBackend(
-          recognizedWord,
-        );
+        Word? wordInfo = await DatabaseHelper().getWordDetail(recognizedWord);
         if (mounted) _showWordCard(wordInfo);
       } else {
         _showToast("未识别到单词");
@@ -193,7 +206,9 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
 
   // --- UI 组件 ---
 
-  void _showWordCard(Map<String, dynamic> info) {
+  void _showWordCard(Word? info) {
+    String text = info?.word ?? '';
+    bool isSentence = text.trim().contains(' ');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -206,7 +221,8 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
           ),
           padding: const EdgeInsets.all(24),
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.5,
+            maxHeight:
+                MediaQuery.of(context).size.height * (isSentence ? 0.6 : 0.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,101 +239,10 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    info['word'],
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.volume_up,
-                      color: Colors.blue,
-                      size: 30,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                info['phonetic'],
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 10),
-              const Text(
-                "释义",
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                info['definition'],
-                style: const TextStyle(fontSize: 18, color: Colors.black87),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "例句",
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      info['example_ms'],
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      info['example_cn'],
-                      style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text("加入生词本"),
-                ),
-              ),
+              if (isSentence)
+                _buildSentenceView(text) //如果是句子
+              else
+                _buildWordView(info),
             ],
           ),
         );
@@ -331,25 +256,6 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
     );
   }
 
-  Future<Map<String, dynamic>> _mockFetchWordInfoFromBackend(
-    String word,
-  ) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return {
-      "word": word,
-      "phonetic": "/$word/",
-      "definition": "这里显示 $word 的中文释义 (来自AI)",
-      "example_ms": "Ini adalah contoh ayat untuk $word.",
-      "example_cn": "这是关于 $word 的一个马来语例句。",
-    };
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     double scanW = MediaQuery.of(context).size.width * 0.8;
@@ -361,19 +267,19 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
         fit: StackFit.expand,
         children: [
           // 1. 相机预览
-          if (_isCameraInitialized && _controller != null)
-            CameraPreview(_controller!)
-          else
-            Container(
-              color: Colors.black,
-              child: const Center(
-                child: Text(
-                  "模拟器模式\n左下角选图，长按按钮无效",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 18),
-                ),
-              ),
-            ),
+          // if (_isCameraInitialized && _controller != null)
+          //   CameraPreview(_controller!)
+          // else
+          //   Container(
+          //     color: Colors.black,
+          //     child: const Center(
+          //       child: Text(
+          //         "模拟器模式\n左下角选图，长按按钮无效",
+          //         textAlign: TextAlign.center,
+          //         style: TextStyle(color: Colors.grey, fontSize: 18),
+          //       ),
+          //     ),
+          //   ),
 
           // 2. 挖孔遮罩层
           ColorFiltered(
@@ -531,6 +437,285 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSentenceView(String text) {
+    // 使用 FutureBuilder 同时并发请求中文和英文翻译
+    return FutureBuilder(
+      future: Future.wait([
+        translator.translate(text, from: 'ms', to: 'zh-cn'), // 马 -> 中
+        translator.translate(text, from: 'ms', to: 'en'), // 马 -> 英
+      ]),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20.0),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return const Center(child: Text("翻译失败，请检查网络"));
+        }
+
+        final results = snapshot.data as List<Translation>;
+        final String zhText = results[0].text;
+        final String enText = results[1].text;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "原文 (Malay)",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 20),
+
+            // 中文翻译
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    "CN",
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  "中文释义",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              zhText,
+              style: const TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 英文翻译
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    "EN",
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  "English Translation",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              enText,
+              style: const TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+
+            const SizedBox(height: 30),
+            // 句子也可以加入生词本（可选）
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // TODO: 保存句子的逻辑
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text("复制译文"),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ==========================================
+  // 场景 B: 单词视图 (你原来的代码封装)
+  // ==========================================
+  Widget _buildWordView(Word? info) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              info?.word ?? '',
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            IconButton(
+              onPressed: () {
+                // 这里调用发音
+                _speak(info?.word ?? '');
+              },
+              icon: const Icon(Icons.volume_up, color: Colors.blue, size: 30),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "EN",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              info?.english ?? '',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+                decoration: TextDecoration.underline,
+                decorationColor: Colors.black12,
+                decorationStyle: TextDecorationStyle.dashed,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "CN",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              info?.chinese ?? '',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+                decoration: TextDecoration.underline,
+                decorationColor: Colors.black12,
+                decorationStyle: TextDecorationStyle.dashed,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () {
+              // 这里记得调用你之前写的 FirebaseHelper().addFavorite()
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WordDetailPage(word: info!),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text("Details"),
+          ),
+        ),
+      ],
     );
   }
 }
