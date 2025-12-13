@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../data/word_model.dart';
@@ -17,12 +18,26 @@ class WordDetailPage extends StatefulWidget {
 class _WordDetailPageState extends State<WordDetailPage> {
   late final Word word;
   late FlutterTts? flutterTts;
+  bool isBookmarked = false;
 
   @override
   void initState() {
     super.initState();
     word = widget.word;
+    _checkFavoriteStatus();
     initTts(); // 初始化TTS
+  }
+
+  Future<void> _checkFavoriteStatus() async {
+    // 调用 FirebaseHelper 里的 isFavorite 方法
+    bool status = await FirebaseHelper().isFavorite(widget.word.id);
+
+    // 如果页面还没销毁，就更新 UI
+    if (mounted) {
+      setState(() {
+        isBookmarked = status;
+      });
+    }
   }
 
   // 3. 初始化配置
@@ -58,6 +73,36 @@ class _WordDetailPageState extends State<WordDetailPage> {
     await flutterTts?.speak(text);
   }
 
+  Future<void> _toggleFavorite() async {
+    // 3. 乐观更新 (Optimistic Update)
+    // 不用等网络返回，直接先改 UI，体验更流畅
+    setState(() {
+      isBookmarked = !isBookmarked;
+    });
+
+    try {
+      if (isBookmarked) {
+        // 如果变成了 true，说明是添加收藏
+        await FirebaseHelper().addFavorite(widget.word.id);
+        print("已添加到 Firebase");
+      } else {
+        // 如果变成了 false，说明是取消收藏
+        await FirebaseHelper().removeFavorite(widget.word.id);
+        print("已从 Firebase 移除");
+      }
+    } catch (e) {
+      // 4. 如果网络请求失败了，把 UI 改回去，并提示用户
+      if (mounted) {
+        setState(() {
+          isBookmarked = !isBookmarked; // 回滚状态
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败，请检查网络: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
@@ -72,12 +117,15 @@ class _WordDetailPageState extends State<WordDetailPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.bookmark_border,
-              color: Colors.black87,
+            icon: Icon(
+              // 如果收藏了，用实心图标；没收藏，用空心图标
+              isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+              // 如果收藏了，可以换个醒目的颜色（比如原有黑色，或者深橙色/蓝色）
+              color: isBookmarked ? Colors.orange : Colors.black87,
               size: 28,
             ),
-            onPressed: () {},
+            // 绑定点击事件
+            onPressed: _toggleFavorite,
           ),
           const SizedBox(width: 16),
         ],
@@ -132,7 +180,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
             height: 1.0,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Row(
           children: [
             InkWell(
@@ -170,7 +218,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
               ),
             ),
 
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Text(
               word.phonetic,
               style: const TextStyle(
@@ -181,7 +229,8 @@ class _WordDetailPageState extends State<WordDetailPage> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+
+        const SizedBox(height: 10),
         Row(
           children: [
             Container(
@@ -219,7 +268,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
           ],
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Row(
           children: [
             Container(
@@ -285,21 +334,41 @@ class _WordDetailPageState extends State<WordDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          // 5. 用 InkWell 或 GestureDetector 包裹你的 Container
-          onTap: () => _speak(sentence['malay']), // 点击调用发音
-          borderRadius: BorderRadius.circular(20),
-          child: RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.black87,
-                height: 1.4,
-                fontFamily: 'San Francisco',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start, // 顶部对齐：防止句子换行时图标跑到中间很难看
+          children: [
+            // 1. 左侧：句子文本 (使用 Expanded 让它占据剩余宽度)
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Colors.black87,
+                    height: 1.4, // 行高，让阅读更舒服
+                    fontFamily: 'San Francisco',
+                  ),
+                  children: _highlightKeyword(sentence['malay']!, word.word),
+                ),
               ),
-              children: _highlightKeyword(sentence['malay']!, word.word),
             ),
-          ),
+
+            // 2. 中间：间距
+            const SizedBox(width: 16),
+
+            // 3. 右侧：喇叭图标按钮
+            InkWell(
+              onTap: () => _speak(sentence['malay']), // 点击发音
+              borderRadius: BorderRadius.circular(50), // 圆形水波纹
+              child: Padding(
+                padding: const EdgeInsets.all(8.0), // 增加点击热区，方便用户点到
+                child: Icon(
+                  Icons.volume_up_rounded,
+                  size: 24,
+                  color: Colors.grey.shade400, // 灰色显得不那么突兀
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
         Text(
@@ -344,18 +413,45 @@ class _WordDetailPageState extends State<WordDetailPage> {
                   vertical: 0,
                 ),
                 minLeadingWidth: 10,
-                title: InkWell(
-                  // 5. 用 InkWell 或 GestureDetector 包裹你的 Container
-                  onTap: () => _speak(phrase['phrase']), // 点击调用发音
-                  borderRadius: BorderRadius.circular(20),
-                  child: Text(
-                    phrase['phrase']!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.black87,
+                title: Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start, // 顶部对齐：防止句子换行时图标跑到中间很难看
+                  children: [
+                    // 1. 左侧：句子文本 (使用 Expanded 让它占据剩余宽度)
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.black87,
+                            height: 1.4, // 行高，让阅读更舒服
+                            fontFamily: 'San Francisco',
+                          ),
+                          children: _highlightKeyword(
+                            phrase['phrase']!,
+                            word.word,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+
+                    // 2. 中间：间距
+                    const SizedBox(width: 16),
+
+                    // 3. 右侧：喇叭图标按钮
+                    InkWell(
+                      onTap: () => _speak(phrase['phrase']), // 点击发音
+                      borderRadius: BorderRadius.circular(50), // 圆形水波纹
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0), // 增加点击热区，方便用户点到
+                        child: Icon(
+                          Icons.volume_up_rounded,
+                          size: 24,
+                          color: Colors.grey.shade400, // 灰色显得不那么突兀
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

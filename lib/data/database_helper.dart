@@ -188,4 +188,70 @@ class DatabaseHelper {
       return Word.fromJson(mutableMap);
     }).toList();
   }
+
+  // 根据一组 ID 获取单词详情 (用于配合 Firebase)
+  Future<List<Word>> getWordsByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+
+    final db = await database;
+
+    // 动态构建问号占位符: "?, ?, ?, ?"
+    String placeholders = List.filled(ids.length, '?').join(',');
+
+    // 查询这些 ID 对应的所有单词
+    final List<Map<String, dynamic>> maps = await db.query(
+      'words',
+      where: 'id IN ($placeholders)', // 使用 IN 语法
+      whereArgs: ids,
+    );
+
+    // 注意：SQLite 返回的顺序可能和 ids 列表顺序不一致
+    // 如果需要严格按收藏时间排序，需要在内存里重新排一下，或者用更复杂的 SQL
+
+    // ... 这里接你之前的 maps.map 转换逻辑 ...
+    return maps.map((map) {
+      // 1. 创建一个可修改的副本 (Map 从数据库读出来通常是只读的)
+      final mutableMap = Map<String, dynamic>.from(map);
+
+      // 2. 处理 JSON 字段：SQLite 取出来是 String，需要解码
+      // 如果 sentences 字段存在且是字符串，尝试解码
+      if (mutableMap['sentences'] != null &&
+          mutableMap['sentences'] is String) {
+        try {
+          mutableMap['sentences'] = jsonDecode(mutableMap['sentences']);
+        } catch (e) {
+          print('Error decoding sentences: $e');
+          mutableMap['sentences'] = [];
+        }
+      }
+
+      // 如果 collocations 字段存在且是字符串，尝试解码
+      if (mutableMap['collocations'] != null &&
+          mutableMap['collocations'] is String) {
+        try {
+          mutableMap['collocations'] = jsonDecode(mutableMap['collocations']);
+        } catch (e) {
+          print('Error decoding collocations: $e');
+          mutableMap['collocations'] = [];
+        }
+      }
+
+      // 3. ⚠️ 字段名兼容处理 (非常重要)
+      // 你的 Word.fromJson 找的是 'malay_word'，但数据库字段可能是 'word'
+      // 这里做一个手动映射，防止数据取不到
+      if (!mutableMap.containsKey('malay_word') &&
+          mutableMap.containsKey('word')) {
+        mutableMap['malay_word'] = mutableMap['word'];
+      }
+      if (!mutableMap.containsKey('english_meaning') &&
+          mutableMap.containsKey('meaning')) {
+        // 假设数据库里的 meaning 对应 english_meaning，或者是结构体
+        // 如果 meaning 也是 JSON 字符串，记得像上面一样 decode
+        // mutableMap['english_meaning'] = mutableMap['meaning'];
+      }
+
+      // 4. 转换为 Word 对象
+      return Word.fromJson(mutableMap);
+    }).toList();
+  }
 }

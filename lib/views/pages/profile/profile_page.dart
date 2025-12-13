@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/pages/login/login_page.dart';
 import 'package:malay/views/pages/profile/appearance_page.dart';
+import 'package:malay/views/pages/profile/favorites_page.dart';
 import 'package:provider/provider.dart'; // 用于退出登录跳转
 
 class ProfilePage extends StatelessWidget {
@@ -244,8 +245,13 @@ class ProfilePage extends StatelessWidget {
           _buildListItem(
             icon: Icons.tune,
             color: Colors.purpleAccent,
-            title: "Study Settings", // 学习设置
-            onTap: () {},
+            title: "My Words", // 学习设置
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FavoritesPage()),
+              );
+            },
           ),
           _buildDivider(),
           _buildListItem(

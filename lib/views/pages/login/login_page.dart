@@ -41,10 +41,10 @@ class _LoginPageState extends State<LoginPage>
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
     try {
-      // await _authService.signInWithEmail(
-      //   _emailController.text,
-      //   _passwordController.text,
-      // );
+      await _authService.signInWithEmail(
+        _emailController.text,
+        _passwordController.text,
+      );
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
