@@ -7,10 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:malay/data/word_model.dart';
+import 'package:malay/utils/show_top_message.dart';
 import 'package:malay/views/pages/word_detail_page.dart';
 import 'package:translator/translator.dart'; // 图片处理库
 import '../../../data/database_helper.dart';
 import '../../../data/tts_helper.dart';
+import 'package:flutter/services.dart';
 
 class CameraOcrPage extends StatefulWidget {
   const CameraOcrPage({super.key});
@@ -25,6 +27,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
   final ImagePicker _picker = ImagePicker();
   bool _isCameraInitialized = false;
   bool _isProcessing = false;
+  bool _isSentence = false;
 
   // 🔴 替换你的百度 API Key
   final String _apiKey = "5xrVbswskRM8RcBFteZCJ8dR";
@@ -134,11 +137,16 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
 
       // 2. 百度 OCR
       String? recognizedWord = await _performBaiduOcr(croppedImage);
+      _isSentence = recognizedWord?.trim().contains(' ') ?? true;
 
       if (recognizedWord != null && recognizedWord.isNotEmpty) {
         // 3. 模拟后端查词
-        Word? wordInfo = await DatabaseHelper().getWordDetail(recognizedWord);
-        if (mounted) _showWordCard(wordInfo);
+        if (_isSentence) {
+          if (mounted) _showSentCard(recognizedWord);
+        } else {
+          Word? wordInfo = await DatabaseHelper().getWordDetail(recognizedWord);
+          if (mounted) _showWordCard(wordInfo);
+        }
       } else {
         _showToast("未识别到单词");
       }
@@ -207,8 +215,6 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
   // --- UI 组件 ---
 
   void _showWordCard(Word? info) {
-    String text = info?.word ?? '';
-    bool isSentence = text.trim().contains(' ');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -222,7 +228,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
           padding: const EdgeInsets.all(24),
           constraints: BoxConstraints(
             maxHeight:
-                MediaQuery.of(context).size.height * (isSentence ? 0.6 : 0.5),
+                MediaQuery.of(context).size.height * (_isSentence ? 0.6 : 0.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,10 +245,46 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              if (isSentence)
-                _buildSentenceView(text) //如果是句子
-              else
-                _buildWordView(info),
+              _buildWordView(info),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSentCard(String text) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.all(24),
+          constraints: BoxConstraints(
+            maxHeight:
+                MediaQuery.of(context).size.height * (_isSentence ? 0.6 : 0.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildSentenceView(text), //如果是句子
             ],
           ),
         );
@@ -458,7 +500,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
         }
 
         if (snapshot.hasError) {
-          return const Center(child: Text("翻译失败，请检查网络"));
+          return const Center(child: Text("translate failed"));
         }
 
         final results = snapshot.data as List<Translation>;
@@ -468,19 +510,10 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "原文 (Malay)",
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
             Text(
               text,
               style: const TextStyle(
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
                 height: 1.4,
@@ -513,7 +546,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  "中文释义",
+                  "中文",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -553,7 +586,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  "English Translation",
+                  "English",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -572,13 +605,25 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
             // 句子也可以加入生词本（可选）
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  // TODO: 保存句子的逻辑
-                  Navigator.pop(context);
+              child: ElevatedButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (context.mounted) {
+                    showTopMessage(
+                      context,
+                      'Successfully copied to the clipboard.',
+                    );
+                  }
                 },
-                icon: const Icon(Icons.copy),
-                label: const Text("复制译文"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text("Copy"),
               ),
             ),
           ],
