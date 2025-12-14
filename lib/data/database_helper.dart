@@ -57,7 +57,7 @@ class DatabaseHelper {
     }
 
     // 4. 打开数据库 (readOnly: true 可以保护数据不被意外修改)
-    return await openDatabase(path, readOnly: true);
+    return await openDatabase(path, readOnly: false, version: 3);
   }
 
   // --- 查询功能 ---
@@ -343,5 +343,191 @@ class DatabaseHelper {
 
       return Word.fromJson(mutableMap);
     }).toList();
+  }
+
+  // 修改 database_helper.dart
+
+  // 1. 获取用于混淆的随机单词 (排除正确答案)
+  Future<List<Word>> getRandomDistractors(
+    int count,
+    String correctWordId,
+  ) async {
+    final db = await database;
+    // 随机取 count 个不等于 correctWordId 的词
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      'SELECT * FROM words WHERE id != ? ORDER BY RANDOM() LIMIT ?',
+      [correctWordId, count],
+    );
+    return maps.map((e) => Word.fromJson(e)).toList(); // 假设你有 fromJson
+  }
+
+  // 2. [核心逻辑] 获取今日学习列表 (优先级算法)
+  // 优先级：没学完的(正在复习队列且时间到了) > 新词 (随机)
+  Future<List<Word>> getPrioritizedStudyGroup(
+    String category,
+    int limit,
+  ) async {
+    final db = await database;
+    int now = DateTime.now().millisecondsSinceEpoch;
+
+    List<Word> studyList = [];
+
+    // A. 先获取 "该复习了" 或者 "学了一半" 的词
+    // 条件：在 stats 表中，且 next_review_at 小于等于现在
+    final List<Map<String, dynamic>> dueWordsMaps = await db.rawQuery(
+      '''
+    SELECT w.*, s.status, s.streak 
+    FROM words w
+    INNER JOIN user_word_stats s ON w.id = s.word_id
+    WHERE s.next_review_at <= ? AND w.category = ?
+    ORDER BY s.next_review_at ASC
+    LIMIT ?
+  ''',
+      [now, category, limit],
+    );
+
+    studyList.addAll(dueWordsMaps.map((e) => Word.fromJson(e)));
+
+    // B. 如果数量不够 10 个，从新词里随机补齐
+    if (studyList.length < limit) {
+      int remaining = limit - studyList.length;
+
+      // 查出不在 stats 表里的词 (即从未学过的词)
+      final List<Map<String, dynamic>> newWordsMaps = await db.rawQuery(
+        '''
+      SELECT * FROM words 
+      WHERE id NOT IN (SELECT word_id FROM user_word_stats) AND category = ?
+      ORDER BY RANDOM() 
+      LIMIT ?
+    ''',
+        [category, remaining],
+      );
+
+      studyList.addAll(newWordsMaps.map((e) => Word.fromJson(e)));
+    }
+
+    return studyList;
+  }
+
+  // 3. [核心逻辑] 更新单个单词的学习进度 (艾宾浩斯简化版算法)
+  Future<void> updateWordProgress(String wordId, bool isCorrect) async {
+    final db = await database;
+    int now = DateTime.now().millisecondsSinceEpoch;
+
+    // 先查一下现在的状态
+    final List<Map<String, dynamic>> stats = await db.query(
+      'user_word_stats',
+      where: 'word_id = ?',
+      whereArgs: [wordId],
+    );
+
+    int streak = 0;
+    int status = 0;
+
+    if (stats.isNotEmpty) {
+      streak = stats.first['streak'] as int;
+      status = stats.first['status'] as int;
+    }
+
+    int nextReview = 0;
+
+    if (isCorrect) {
+      // 答对了：增加 streak，延长复习间隔
+      streak++;
+      status = 1; // 标记为学习中
+
+      // 间隔算法 (单位：天)
+      // streak 1 -> 1天后
+      // streak 2 -> 2天后
+      // streak 3 -> 4天后
+      // streak 4 -> 7天后 (已掌握)
+      int daysToAdd = 1;
+      if (streak == 1)
+        daysToAdd = 1;
+      else if (streak == 2)
+        daysToAdd = 2;
+      else if (streak == 3)
+        daysToAdd = 4;
+      else {
+        daysToAdd = 7;
+        status = 2; // 认为已掌握
+      }
+
+      nextReview = now + (daysToAdd * 24 * 60 * 60 * 1000);
+    } else {
+      // 答错了：重置 streak，马上复习 (比如 5 分钟后或明天)
+      streak = 0;
+      status = 1;
+      nextReview = now; // 设为现在，意味着下次获取列表立刻出现
+    }
+
+    // 使用 INSERT OR REPLACE 自动处理新增或更新
+    await db.rawInsert(
+      '''
+    INSERT OR REPLACE INTO user_word_stats (word_id, status, next_review_at, last_studied_at, streak)
+    VALUES (?, ?, ?, ?, ?)
+  ''',
+      [wordId, status, nextReview, now, streak],
+    );
+  }
+
+  // 4. 获取所有待同步的数据 (用于 Firestore)
+  Future<List<Map<String, dynamic>>> getAllStats() async {
+    final db = await database;
+    return await db.query('user_word_stats');
+  }
+
+  // --- 新增：会话缓存相关方法 ---
+
+  // 1. 初始化缓存：当开启新的一组学习时，把这 10 个词存入缓存
+  Future<void> initSessionCache(List<Word> words) async {
+    final db = await database;
+    final batch = db.batch();
+
+    // 先清空旧的（防止意外残留）
+    batch.delete('study_session_cache');
+
+    // 插入新的
+    int now = DateTime.now().millisecondsSinceEpoch;
+    for (var word in words) {
+      batch.insert('study_session_cache', {
+        'word_id': word.id,
+        'stage': 0, // 默认从第0关开始
+        'is_error': 0,
+        'created_at': now,
+      });
+    }
+    await batch.commit();
+  }
+
+  // 2. 更新单个单词进度：每过一关调用一次
+  Future<void> updateSessionProgress(
+    String wordId,
+    int stage,
+    bool isError,
+  ) async {
+    final db = await database;
+    await db.update(
+      'study_session_cache',
+      {'stage': stage, 'is_error': isError ? 1 : 0},
+      where: 'word_id = ?',
+      whereArgs: [wordId],
+    );
+  }
+
+  // 3. 移除缓存：当一个单词彻底学完 (Done) 时调用
+  Future<void> removeSessionItem(String wordId) async {
+    final db = await database;
+    await db.delete(
+      'study_session_cache',
+      where: 'word_id = ?',
+      whereArgs: [wordId],
+    );
+  }
+
+  // 4. 检查是否有未完成的会话 (用于恢复)
+  Future<List<Map<String, dynamic>>> getCachedSession() async {
+    final db = await database;
+    return await db.query('study_session_cache', orderBy: 'created_at ASC');
   }
 }

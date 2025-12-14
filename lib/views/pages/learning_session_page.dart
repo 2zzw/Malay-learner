@@ -1,1148 +1,889 @@
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart'; // 需要添加 collection 依赖用于 shuffle
+import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
+import 'package:malay/views/widgets/word_detail_content.dart';
 import 'package:provider/provider.dart';
+import '../../data/word_model.dart';
+import '../../data/database_helper.dart';
+import '../../data/tts_helper.dart'; // 引用我们之前封装的 TTS
+// 引入你的 WordDetailContent 组件 (单词详情视图)
+// import 'word_detail_content.dart';
 
-// =============================================================================
-// 1. MODELS & ENUMS
-// =============================================================================
-
-enum LearningStage {
-  definition, // 1. 释义选择
-  recall, // 2. 回忆释义
-  listen, // 3. 听音选义
-  spell, // 4. 拼写练习
-  done, // 完成
-}
-
-class LearningWord {
-  final String word;
-  final String phonetic;
-  final String definition;
-  final String exampleEn;
-  final String exampleCn;
-  final List<String> options; // 干扰项 + 正确项
-  final int correctOptionIndex;
-
-  // 学习状态
-  LearningStage stage;
-  bool isWrongThisRound; // 本轮是否错过（错过则进度清零）
-
-  LearningWord({
-    required this.word,
-    required this.phonetic,
-    required this.definition,
-    required this.exampleEn,
-    required this.exampleCn,
-    required this.options,
-    required this.correctOptionIndex,
-    this.stage = LearningStage.definition,
-    this.isWrongThisRound = false,
-  });
-}
-
-// 模拟数据生成器
-List<LearningWord> generateSessionWords() {
-  return List.generate(
-    10,
-    (index) => LearningWord(
-      word: index % 2 == 0 ? "passionate" : "evolve",
-      phonetic: index % 2 == 0 ? "/ˈpæʃənət/" : "/ɪˈvɒlv/",
-      definition: index % 2 == 0 ? "adj. 热情的，热爱的" : "v. 进化，发展",
-      exampleEn: index % 2 == 0
-          ? "He is passionate about music."
-          : "Dogs evolved from wolves.",
-      exampleCn: index % 2 == 0 ? "他酷爱音乐。" : "狗是由狼进化而来的。",
-      options: index % 2 == 0
-          ? ["n. 基础原理", "adj. 富有同情心的", "n. 护照; 手段", "adj. 热情的，热爱的"]
-          : ["v. 进化，发展", "n. 城市居民", "adj. 各种各样的", "adv. 仅仅"],
-      correctOptionIndex: index % 2 == 0 ? 3 : 0,
-    ),
-  );
-}
-
-// =============================================================================
-// 2. MAIN PAGE (CONTROLLER)
-// =============================================================================
-
-class LearningSessionPage extends StatefulWidget {
-  const LearningSessionPage({super.key});
+class StudyPage extends StatefulWidget {
+  const StudyPage({super.key});
 
   @override
-  State<LearningSessionPage> createState() => _LearningSessionPageState();
+  State<StudyPage> createState() => _StudyPageState();
 }
 
-class _LearningSessionPageState extends State<LearningSessionPage> {
-  late List<LearningWord> _queue; // 待学习队列
-  late List<LearningWord> _completed; // 已完成队列
-  int _dailyLearnedCount = 0; // 今日已完成单词数 (满4阶段)
+class _StudyPageState extends State<StudyPage> {
+  List<StudyItem> _studyQueue = [];
+  bool _isLoading = true;
+  StudyItem? _currentItem;
+  // 界面状态控制
+  bool _showResult = false; // 是否正在展示结果/详情
+  bool _isAnswerCorrect = false; // 上一次回答是否正确
+  Word? _selectedOption;
+  bool _isSpellingChecked = false;
 
-  LearningWord? _currentWord;
-  bool _isSessionFinished = false;
+  // 拼写相关
+  TextEditingController _spellingController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _queue = generateSessionWords();
-    _completed = [];
-    _pickNextWord();
+    _initSession();
   }
 
-  // 核心逻辑：挑选下一个单词
-  void _pickNextWord() {
-    if (_queue.isEmpty) {
-      setState(() => _isSessionFinished = true);
+  // 初始化学习组
+  Future<void> _initSession() async {
+    setState(() => _isLoading = true);
+
+    List<StudyItem> items = [];
+
+    // A. 尝试从数据库加载“上次没学完的”
+    final cachedData = await DatabaseHelper().getCachedSession();
+
+    if (cachedData.isNotEmpty) {
+      print("发现未完成的学习会话，正在恢复...");
+
+      // 1. 提取所有单词 ID
+      List<String> wordIds = cachedData
+          .map((e) => e['word_id'] as String)
+          .toList();
+
+      // 2. 查出这些单词的完整信息
+      List<Word> words = await DatabaseHelper().getWordsByIds(wordIds);
+
+      // 3. 重组 StudyItem 队列
+      for (var row in cachedData) {
+        String id = row['word_id'];
+        int stageIndex = row['stage'];
+        bool isError = row['is_error'] == 1;
+
+        // 找到对应的 Word 对象
+        Word? word = words.firstWhereOrNull((w) => w.id == id);
+        if (word != null) {
+          // 重新生成混淆项 (混淆项随机生成即可，不需要严格存库)
+          List<Word> distractors = await DatabaseHelper().getRandomDistractors(
+            3,
+            word.id,
+          );
+
+          items.add(
+            StudyItem(
+              word: word,
+              distractors: distractors,
+              // 恢复进度
+              stage: StudyStage.values[stageIndex],
+              // 如果之前错过，这里可以标记 (需要 StudyItem 支持记录 isError，或者简单恢复 stage 即可)
+            ),
+          );
+        }
+      }
+    } else {
+      // B. 如果没有缓存，说明是新的一组，执行之前的逻辑
+      print("开启新的学习会话");
+      List<Word> words = await DatabaseHelper().getPrioritizedStudyGroup(
+        'Basic',
+        10,
+      );
+
+      // [关键] 立即把这组新词存入缓存表
+      await DatabaseHelper().initSessionCache(words);
+
+      for (var word in words) {
+        List<Word> distractors = await DatabaseHelper().getRandomDistractors(
+          3,
+          word.id,
+        );
+        items.add(StudyItem(word: word, distractors: distractors));
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _studyQueue = items;
+        _isLoading = false;
+        if (_studyQueue.isNotEmpty) {
+          _nextWord();
+        } else {
+          _showSessionComplete(); // 极少情况：缓存里是空的但查出来了
+        }
+      });
+    }
+  }
+
+  // 核心调度逻辑：获取下一个任务
+  void _nextWord() {
+    // 过滤出未完成的
+    var pending = _studyQueue.where((i) => i.stage != StudyStage.done).toList();
+
+    if (pending.isEmpty) {
+      // 全部学完，弹出结算页面
+      _showSessionComplete();
       return;
     }
 
+    // 简单的轮询策略：取第一个。
+    // 如果你想让同一个词连续学完4关，就一直用同一个。
+    // 如果想穿插学习（推荐），就每次 shuffle 或者取下一个。
+    // 这里使用：如果上一个还没做完且答对了，继续它的下一关（趁热打铁）；否则换一个词。
+
     setState(() {
-      // 简单轮询策略：取第一个，学完放回队尾或移出
-      _currentWord = _queue.first;
+      _showResult = false;
+      _isAnswerCorrect = false;
+      _selectedOption = null;
+      _isSpellingChecked = false;
+      _spellingController.clear();
+      // 如果当前词还存在且没学完，优先继续学它 (符合图片逻辑 "下一词" 可能指同一个词的新阶段)
+      // 但通常背单词软件会穿插。这里按你的需求：
+      // "前一个学习完成才会出现下一种" -> 这意味着必须通关。
+      // 我们从 pending 里找一个即可。
+      _currentItem = pending.first;
+
+      // 如果是听力题，自动播放发音
+      if (_currentItem!.stage == StudyStage.audioSelection ||
+          _currentItem!.stage == StudyStage.recall) {
+        TtsHelper().speak(_currentItem!.word.word);
+      }
     });
   }
 
-  // 处理当前单词学习结果
-  void _handleWordProgress({
-    required bool correct,
-    required bool stayInCurrentStage,
-  }) {
-    if (_currentWord == null) return;
+  void _handleOptionSelected(Word selected) {
+    // 如果已经选过（主要是针对答错后的状态），禁止再次点击其他选项
+    if (_selectedOption != null) return;
 
     setState(() {
-      if (stayInCurrentStage) {
-        // 比如看答案、选错后查看详情，此时还在当前单词，只是状态变成了“详情展示中”
-        // 逻辑由子组件控制显示，这里主要处理队列逻辑
-        // 如果选错了，标记一下，等会进度要清零
-        if (!correct) _currentWord!.isWrongThisRound = true;
-      } else {
-        // 点击“下一词”
-        if (_currentWord!.isWrongThisRound) {
-          // 如果本轮错过，进度清零，重回第一阶段
-          _currentWord!.stage = LearningStage.definition;
-          _currentWord!.isWrongThisRound = false;
-          // 移到队尾，稍后复习
-          _queue.removeAt(0);
-          _queue.add(_currentWord!);
-        } else {
-          // 如果全对，晋级下一阶段
-          int nextStageIndex = _currentWord!.stage.index + 1;
-          if (nextStageIndex >= LearningStage.done.index) {
-            // 彻底完成
-            _dailyLearnedCount++;
-            _completed.add(_queue.removeAt(0));
-          } else {
-            // 进入下一阶段，移到队尾循环
-            _currentWord!.stage = LearningStage.values[nextStageIndex];
-            _queue.removeAt(0);
-            _queue.add(_currentWord!);
-          }
-        }
-        // 选下一个
-        _pickNextWord();
-      }
+      _selectedOption = selected;
     });
+
+    bool isCorrect = selected.id == _currentItem!.word.id;
+
+    if (isCorrect) {
+      // 情况 A: 选对了 -> 直接进入详情页 (原有逻辑)
+      _handleResult(true);
+    } else {
+      // 情况 B: 选错了 -> 仅仅更新 UI (变红变绿)，暂停跳转
+      // 此时界面会重绘，根据 _selectedOption 显示颜色
+      // 等待用户点击底部的“继续”按钮来调用 _handleResult(false)
+
+      // 可选：答错时播放一个错误音效或震动
+    }
+  }
+
+  void _handleRecall(bool known) {
+    // 认识 -> 正确， 不认识 -> 错误
+    _handleResult(known);
+  }
+
+  void _handleSpellingCheck() {
+    String input = _spellingController.text.trim().toLowerCase();
+    String target = _currentItem!.word.word.toLowerCase();
+    bool correct = input == target;
+    // 拼写题如果错了，通常不立即跳转，而是显示红绿字母。这里为了简化逻辑，统一处理。
+    // 你的需求是：拼写错误 -> 标红标绿 -> 继续 -> 详情 -> 下一词
+    _handleResult(correct);
+  }
+
+  // 统一处理结果
+  void _handleResult(bool correct) {
+    setState(() {
+      _isAnswerCorrect = correct;
+      _showResult = true; // 切换到详情/结果模式
+    });
+
+    if (correct) {
+      // 只有在显示结果界面点击“下一词”时才真正 promote，但为了逻辑简单，这里预处理
+      // 实际 promote 在点击 next 按钮时触发
+      TtsHelper().speak(_currentItem!.word.word); // 答对了读一遍
+    } else {
+      // 答错了，进度清零
+      _currentItem!.reset();
+      DatabaseHelper().updateSessionProgress(_currentItem!.word.id, 0, true);
+      // 重新生成一下混淆项，防止下次记住位置
+      // (可选优化) _refreshDistractors(_currentItem!);
+    }
+  }
+
+  // 点击“下一词”按钮
+  void _onNextPressed() async {
+    if (_isAnswerCorrect) {
+      _currentItem!.promote();
+      if (_currentItem!.stage == StudyStage.done) {
+        // 记录到数据库：今日完成 +1
+        await DatabaseHelper().updateWordProgress(_currentItem!.word.id, true);
+        await DatabaseHelper().removeSessionItem(_currentItem!.word.id);
+      } else {
+        // 把这个词移到队列末尾，产生间隔效果 (Spaced Repetition inside session)
+        _studyQueue.remove(_currentItem!);
+        _studyQueue.add(_currentItem!);
+        await DatabaseHelper().updateSessionProgress(
+          _currentItem!.word.id,
+          _currentItem!.stage.index,
+          false, // 没错
+        );
+      }
+    } else {
+      await DatabaseHelper().updateWordProgress(_currentItem!.word.id, false);
+      await DatabaseHelper().updateSessionProgress(
+        _currentItem!.word.id,
+        0, // 重置回第 0 关
+        true, // 标记错过
+      );
+      // 答错了，已经 reset 过了，移到末尾稍后重试
+      _studyQueue.remove(_currentItem!);
+      _studyQueue.add(_currentItem!);
+    }
+
+    _nextWord();
+  }
+
+  void _showSessionComplete() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("今日任务完成！"),
+        content: const Text("你已经完成了本组 10 个单词的学习。"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(), // 返回主页
+            child: const Text("太棒了"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [新增] 退出页面的处理逻辑
+  Future<bool> _onWillPop() async {
+    try {
+      // 触发云端同步
+      await FirebaseHelper().syncProgressToCloud();
+    } catch (e) {
+      print("同步失败: $e");
+      // 可以选择提示用户，或者默默失败下次再传
+    }
+
+    // 允许退出
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
     final bgUrl = context.watch<ThemeProvider>().currentBackgroundUrl;
 
-    if (_isSessionFinished) {
-      return _buildFinishView();
-    }
+    if (_isLoading)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_currentItem == null) return const Scaffold();
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black54),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          "$_dailyLearnedCount/10", // 顶部进度
-          style: const TextStyle(
-            color: Colors.black54,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black54),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.black54),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
+    return PopScope(
+      canPop: false, // 禁止直接退出，必须走 onPopInvoked
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // 执行同步逻辑
+        bool shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Stack(
         children: [
-          // 背景
-          Image.network(bgUrl, fit: BoxFit.cover),
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Container(color: Colors.white.withOpacity(0.92)),
+          Positioned.fill(child: Image.network(bgUrl, fit: BoxFit.cover)),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+              child: Container(color: Colors.white.withValues(alpha: 0.85)),
+            ),
           ),
+          Scaffold(
+            backgroundColor: Colors.transparent, // 关键：Scaffold 透明
+            extendBodyBehindAppBar: true,
+            appBar: AppBar(
+              backgroundColor: Colors.white.withValues(alpha: 0.5),
+              flexibleSpace: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              title: Text(
+                "Study (${_studyQueue.where((i) => i.stage == StudyStage.done).length}/10)",
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                onPressed: () async {
+                  bool shouldPop = await _onWillPop();
+                  if (shouldPop && context.mounted) Navigator.of(context).pop();
+                },
+              ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(4),
+                child: LinearProgressIndicator(
+                  value:
+                      _studyQueue
+                          .where((i) => i.stage == StudyStage.done)
+                          .length /
+                      10.0,
+                  backgroundColor: Colors.black12, // 轨道颜色淡一点
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Colors.teal,
+                  ), // 进度条颜色
+                  minHeight: 4, // 稍微粗一点点更现代
+                ),
+              ),
+            ),
+            body: SafeArea(
+              // 必须加 SafeArea，否则内容会跑进状态栏和 AppBar 里面
+              // 只要顶部不要被挡住，bottom 可以设为 false 让背景延伸到底部
+              top: true,
+              bottom: false,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 1. 背景层 (保持 App 统一调性)
+                  Image.network(bgUrl, fit: BoxFit.cover),
+                  // 叠加层：使背景变淡，让前台内容清晰
+                  BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
 
-          // 内容区域
-          SafeArea(child: _buildCurrentStageWidget()),
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          children: [
+                            // 顶部进度点 (表示当前单词的 4 个阶段)
+                            _buildStageIndicators(),
+
+                            Expanded(
+                              child: _showResult
+                                  ? _buildResultView() // 结果/详情页
+                                  : _buildQuestionView(), // 题目页
+                            ),
+                          ],
+                        ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCurrentStageWidget() {
-    if (_currentWord == null) return const SizedBox();
+  // 顶部 4 个小进度条/点
+  Widget _buildStageIndicators() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(4, (index) {
+          bool active = index < _currentItem!.progress;
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            width: 40,
+            height: 6,
+            decoration: BoxDecoration(
+              color: active ? Colors.green : Colors.grey[300],
+              borderRadius: BorderRadius.circular(3),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
-    switch (_currentWord!.stage) {
-      case LearningStage.definition:
-        return Stage1DefinitionSelect(
-          word: _currentWord!,
-          onNext: (correct) =>
-              _handleWordProgress(correct: correct, stayInCurrentStage: false),
-          onShowDetail: () => _handleWordProgress(
-            correct: false,
-            stayInCurrentStage: true,
-          ), // 这里的 correct=false 意味着这轮不算完美通过
-        );
-      case LearningStage.recall:
-        return Stage2Recall(
-          word: _currentWord!,
-          onNext: (correct) =>
-              _handleWordProgress(correct: correct, stayInCurrentStage: false),
-        );
-      case LearningStage.listen:
-        return Stage3ListenSelect(
-          word: _currentWord!,
-          onNext: (correct) =>
-              _handleWordProgress(correct: correct, stayInCurrentStage: false),
-          onShowDetail: () =>
-              _handleWordProgress(correct: false, stayInCurrentStage: true),
-        );
-      case LearningStage.spell:
-        return Stage4Spelling(
-          word: _currentWord!,
-          onNext: (correct) =>
-              _handleWordProgress(correct: correct, stayInCurrentStage: false),
-        );
+  // 构建问题视图 (根据当前阶段)
+  Widget _buildQuestionView() {
+    switch (_currentItem!.stage) {
+      case StudyStage.definitionSelection:
+        return _buildSelectionMode(hideWord: false, hideAudio: false);
+      case StudyStage.recall:
+        return _buildRecallMode();
+      case StudyStage.audioSelection:
+        return _buildSelectionMode(hideWord: true, hideAudio: false); // 模糊单词
+      case StudyStage.spelling:
+        return _buildSpellingMode();
       default:
         return const SizedBox();
     }
   }
 
-  Widget _buildFinishView() {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.teal, size: 80),
-            const SizedBox(height: 20),
-            const Text(
-              "Session Complete!",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Back to Home"),
-            ),
-          ],
+  // 构建结果/详情视图 (复用单词详情组件)
+  Widget _buildResultView() {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            // 增加一点内边距，防止内容贴边
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            // 这里直接放你的复用组件
+            child: WordDetailContent(word: _currentItem!.word),
+          ),
         ),
-      ),
-    );
-  }
-}
 
-// =============================================================================
-// 3. STAGE 1: DEFINITION SELECTION (图一)
-// =============================================================================
-
-class Stage1DefinitionSelect extends StatefulWidget {
-  final LearningWord word;
-  final Function(bool correct) onNext;
-  final VoidCallback onShowDetail; // 触发详情展示逻辑
-
-  const Stage1DefinitionSelect({
-    super.key,
-    required this.word,
-    required this.onNext,
-    required this.onShowDetail,
-  });
-
-  @override
-  State<Stage1DefinitionSelect> createState() => _Stage1DefinitionSelectState();
-}
-
-class _Stage1DefinitionSelectState extends State<Stage1DefinitionSelect> {
-  int? _selectedOption; // 用户选了哪个
-  bool _showDetail = false; // 是否展示详情模式
-  bool _isCorrect = false;
-
-  void _handleSelection(int index) {
-    if (_showDetail) return; // 防止重复点击
-
-    setState(() {
-      _selectedOption = index;
-      _isCorrect = index == widget.word.correctOptionIndex;
-      _showDetail = true;
-    });
-
-    if (!_isCorrect) {
-      widget.onShowDetail(); // 通知父级：这题做错了/看答案了，标记 dirty
-    }
-  }
-
-  void _handleSeeAnswer() {
-    setState(() {
-      _showDetail = true;
-      _isCorrect = false; // 看答案算错
-    });
-    widget.onShowDetail();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // 如果答对了，或者点击了继续，展示详情页
-    if (_showDetail && _isCorrect) {
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        onButtonTap: () => widget.onNext(true), // 答对直接进下一词
-      );
-    }
-
-    // 如果答错/看答案，展示详情页，但下方按钮是 Next (父级会重置进度)
-    if (_showDetail && !_isCorrect && _selectedOption == null) {
-      // 看答案模式，直接展示详情
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        onButtonTap: () => widget.onNext(false),
-      );
-    }
-
-    // 正常答题界面 / 答错后的红绿反馈界面
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const Spacer(flex: 1),
-          // 单词主体
-          Text(
-            widget.word.word,
-            style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900),
+        // 底部控制栏
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12)],
           ),
-          const SizedBox(height: 8),
-          _buildPhonetic(widget.word.phonetic),
-          const SizedBox(height: 16),
-          Text(
-            "Recall definition then select, or 'See Answer'",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
-          const Spacer(flex: 2),
-
-          // 选项区
-          ...List.generate(4, (index) {
-            Color bgColor = Colors.white;
-            Color textColor = Colors.black87;
-
-            // 答错后的颜色逻辑
-            if (_showDetail) {
-              if (index == widget.word.correctOptionIndex) {
-                bgColor = Colors.green.shade100; // 正确项标绿
-                textColor = Colors.green.shade800;
-              } else if (index == _selectedOption) {
-                bgColor = Colors.red.shade100; // 选错项标红
-                textColor = Colors.red.shade800;
-              }
-            }
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GestureDetector(
-                onTap: () => _handleSelection(index),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!_isAnswerCorrect &&
+                    _currentItem!.stage == StudyStage.recall)
+                  // 如果是“记错了”，显示这个
+                  const Text(
+                    "Keep going! Progress reset.",
+                    style: TextStyle(color: Colors.orange),
                   ),
-                  child: Text(
-                    widget.word.options[index],
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: textColor,
-                      fontWeight: FontWeight.w500,
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _onNextPressed,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isAnswerCorrect
+                          ? Colors.green
+                          : Colors.blue,
+                    ),
+                    child: const Text(
+                      "下一词 / Next Word",
+                      style: TextStyle(color: Colors.white, fontSize: 18),
                     ),
                   ),
                 ),
-              ),
-            );
-          }),
-
-          const Spacer(flex: 2),
-
-          // 底部逻辑
-          if (!_showDetail)
-            TextButton(
-              onPressed: _handleSeeAnswer,
-              child: const Text(
-                "See Answer",
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          else if (!_isCorrect)
-            // 答错了，显示 Continue 按钮，点击后才进详情
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  shape: const StadiumBorder(),
-                ),
-                onPressed: () {
-                  // 切换到纯详情模式
-                  // 这里因为状态复杂，我们简单处理：直接调onNext(false)
-                  // 或者更好的体验：setState 一个模式，显示 WordDetailEmbedded
-                  // 为了简化代码，这里假设点击 Continue 直接去下一词(重置进度)
-                  // *修正需求*: "点击后显示单词详情页面，下方出现下一词按钮"
-                  // 由于 build 开头已经处理了 _showDetail 的情况，这里需要在 UI 上做个 trick
-                  // 我们在 build 最上面处理。
-                  // 这里简单起见，直接跳过中间态，你可以扩展。
-                  widget.onNext(false);
-                },
-                child: const Text(
-                  "Continue",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-          const SizedBox(height: 30),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhonetic(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.volume_up, size: 16, color: Colors.black54),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black54,
-              fontFamily: 'San Francisco',
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
-}
 
-// =============================================================================
-// 4. STAGE 2: RECALL / FLASHCARD (图二)
-// =============================================================================
-
-class Stage2Recall extends StatefulWidget {
-  final LearningWord word;
-  final Function(bool correct) onNext;
-
-  const Stage2Recall({super.key, required this.word, required this.onNext});
-
-  @override
-  State<Stage2Recall> createState() => _Stage2RecallState();
-}
-
-class _Stage2RecallState extends State<Stage2Recall> {
-  bool _revealed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (_revealed) {
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        secondaryButtonText: "I was wrong",
-        onButtonTap: () => widget.onNext(true), // 认识 -> 进度+1
-        onSecondaryTap: () => widget.onNext(false), // 记错了 -> 进度清零
-      );
-    }
+  // --- 模式 1 & 3: 选择题 (图一 & 图三) ---
+  Widget _buildSelectionMode({
+    required bool hideWord,
+    required bool hideAudio,
+  }) {
+    List<Word> options = [..._currentItem!.distractors, _currentItem!.word];
+    // 当前正确答案的 ID
+    final String correctId = _currentItem!.word.id;
+    // 是否已经做出了选择（且选错了，因为选对直接跳走了）
+    final bool hasSelectedWrong =
+        _selectedOption != null && _selectedOption!.id != correctId;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Spacer(flex: 1),
-          Text(
-            widget.word.word,
-            style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  widget.word.phonetic,
-                  style: const TextStyle(color: Colors.black54),
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 40),
+          if (hideWord)
+            // 图三：模糊单词
+            Text(
+              _currentItem!.word.word.replaceAll(RegExp(r'[a-zA-Z]'), '*'),
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 4,
+              ),
+            )
+          else
+            Text(
+              _currentItem!.word.word,
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+            ),
 
-          // 模糊的释义
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => TtsHelper().speak(_currentItem!.word.word),
             child: Container(
-              padding: const EdgeInsets.all(20),
-              color: Colors.grey.shade100,
-              child: Column(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.word.definition,
-                    style: const TextStyle(fontSize: 18, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.word.exampleCn,
-                    style: const TextStyle(fontSize: 14, color: Colors.black54),
-                  ),
+                  const Icon(Icons.volume_up, size: 18),
+                  const SizedBox(width: 8),
+                  Text("/${_currentItem!.word.phonetic}/"),
                 ],
               ),
             ),
           ),
 
-          const SizedBox(height: 30),
-          // 清晰的例句 (不含中文翻译)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-            child: Text(
-              widget.word.exampleEn.replaceAll(
-                widget.word.word,
-                "____",
-              ), // 挖空单词
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, height: 1.4),
-            ),
-          ),
-
-          const Spacer(flex: 2),
-
-          // 提示按钮 (bulb)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: const Icon(Icons.lightbulb_outline, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Hint",
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-          ),
-
           const Spacer(),
+          ...options.map((option) {
+            Color borderColor = Colors.grey.shade300;
+            Color bgColor = Colors.transparent;
+            Color textColor = Colors.black87;
 
-          // 底部按钮
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => widget.onNext(true), // 认识
-                  child: const Text(
-                    "Know",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.teal,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: TextButton(
-                  onPressed: () =>
-                      setState(() => _revealed = true), // 不认识 -> 显示详情
-                  child: const Text(
-                    "Don't Know",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 30),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// 5. STAGE 3: LISTEN SELECTION (图三)
-// =============================================================================
-
-class Stage3ListenSelect extends StatelessWidget {
-  final LearningWord word;
-  final Function(bool correct) onNext;
-  final VoidCallback onShowDetail;
-
-  const Stage3ListenSelect({
-    super.key,
-    required this.word,
-    required this.onNext,
-    required this.onShowDetail,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // 逻辑与 Stage 1 高度重合，为了节省篇幅，我们复用 Stage 1 的逻辑，
-    // 只是在 build header 时有所不同：单词模糊，音标清晰，大喇叭
-
-    // 这里我们构建一个 Wrapper，只改变头部显示
-    return _Stage1Wrapper(
-      word: word,
-      onNext: onNext,
-      onShowDetail: onShowDetail,
-      headerBuilder: (word) => Column(
-        children: [
-          // 大喇叭
-          const Icon(Icons.volume_up_rounded, size: 60, color: Colors.black87),
-          const SizedBox(height: 20),
-          // 音标
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              word.phonetic,
-              style: const TextStyle(fontSize: 16, color: Colors.black54),
-            ),
-          ),
-          const SizedBox(height: 20),
-          // 模糊的单词
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: Text(
-              word.word,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.black45,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// 辅助 Wrapper，复用 Stage 1 的选项逻辑
-class _Stage1Wrapper extends StatefulWidget {
-  final LearningWord word;
-  final Function(bool correct) onNext;
-  final VoidCallback onShowDetail;
-  final Widget Function(LearningWord) headerBuilder;
-
-  const _Stage1Wrapper({
-    required this.word,
-    required this.onNext,
-    required this.onShowDetail,
-    required this.headerBuilder,
-  });
-
-  @override
-  State<_Stage1Wrapper> createState() => _Stage1WrapperState();
-}
-
-class _Stage1WrapperState extends State<_Stage1Wrapper> {
-  // ... 这里的逻辑代码与 Stage 1 完全一样，为了代码简洁，
-  // 实际工程中应抽取 Logic Mixin 或 Controller。
-  // 在此演示中，我将 Stage1 的 UI 逻辑复制一份并替换 Header。
-
-  int? _selectedOption;
-  bool _showDetail = false;
-  bool _isCorrect = false;
-
-  void _handleSelection(int index) {
-    if (_showDetail) return;
-    setState(() {
-      _selectedOption = index;
-      _isCorrect = index == widget.word.correctOptionIndex;
-      _showDetail = true;
-    });
-    if (!_isCorrect) widget.onShowDetail();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_showDetail && _isCorrect) {
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        onButtonTap: () => widget.onNext(true),
-      );
-    }
-    if (_showDetail && !_isCorrect) {
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        onButtonTap: () => widget.onNext(false),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const Spacer(flex: 1),
-          widget.headerBuilder(widget.word), // 使用自定义头部
-          const Spacer(flex: 1),
-          Text(
-            "Listen and select definition",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
-          const SizedBox(height: 20),
-          ...List.generate(4, (index) {
-            // 选项渲染逻辑同 Stage 1 ...
-            // 简写：
+            if (hasSelectedWrong) {
+              if (option.id == correctId) {
+                // 1. 正确答案：始终变绿
+                borderColor = Colors.green;
+                bgColor = Colors.green.shade50;
+                textColor = Colors.green.shade800;
+              } else if (option.id == _selectedOption!.id) {
+                // 2. 用户选的错误项：变红
+                borderColor = Colors.red;
+                bgColor = Colors.red.shade50;
+                textColor = Colors.red.shade800;
+              }
+            }
             return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GestureDetector(
-                onTap: () => _handleSelection(index),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white, // 简化颜色逻辑
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                      ),
-                    ],
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: bgColor, // 动态背景
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(
+                      color: borderColor,
+                      width:
+                          hasSelectedWrong &&
+                              (option.id == correctId ||
+                                  option.id == _selectedOption!.id)
+                          ? 2
+                          : 1,
+                    ),
+                    alignment: Alignment.centerLeft,
                   ),
-                  child: Text(
-                    widget.word.options[index],
-                    style: const TextStyle(fontSize: 16),
+                  // 如果已经选错了，就禁用点击，防止乱点
+                  onPressed: hasSelectedWrong
+                      ? null
+                      : () => _handleOptionSelected(option),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            option.chinese,
+                            style: TextStyle(
+                              color: textColor, // 动态文字颜色
+                              fontSize: 16,
+                              fontWeight:
+                                  hasSelectedWrong &&
+                                      (option.id == correctId ||
+                                          option.id == _selectedOption!.id)
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // 可选：添加对错图标
+                        if (hasSelectedWrong && option.id == correctId)
+                          const Icon(Icons.check_circle, color: Colors.green),
+                        if (hasSelectedWrong &&
+                            option.id == _selectedOption!.id)
+                          const Icon(Icons.cancel, color: Colors.red),
+                      ],
+                    ),
                   ),
                 ),
               ),
             );
           }),
-          const Spacer(flex: 2),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _showDetail = true;
-                _isCorrect = false;
-              });
-              widget.onShowDetail();
-            },
-            child: const Text(
-              "See Answer",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          const SizedBox(height: 30),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// 6. STAGE 4: SPELLING PRACTICE (图四)
-// =============================================================================
-
-class Stage4Spelling extends StatefulWidget {
-  final LearningWord word;
-  final Function(bool correct) onNext;
-
-  const Stage4Spelling({super.key, required this.word, required this.onNext});
-
-  @override
-  State<Stage4Spelling> createState() => _Stage4SpellingState();
-}
-
-class _Stage4SpellingState extends State<Stage4Spelling> {
-  final TextEditingController _controller = TextEditingController();
-  bool _isChecked = false;
-  bool _isCorrect = false;
-
-  void _checkSpelling() {
-    final input = _controller.text.trim().toLowerCase();
-    final target = widget.word.word.toLowerCase();
-
-    setState(() {
-      _isChecked = true;
-      _isCorrect = input == target;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isChecked && _isCorrect) {
-      // 拼写正确后的详情页
-      return WordDetailEmbedded(
-        word: widget.word,
-        buttonText: "Next Word",
-        onButtonTap: () => widget.onNext(true),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const Spacer(flex: 1),
-
-          // 拼写展示区 (彩色字符)
-          if (_isChecked && !_isCorrect)
-            _buildErrorFeedback()
-          else
-            // 普通输入状态或初始状态
-            Text(
-              _controller.text.isEmpty ? "Type the word" : _controller.text,
-              style: const TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.bold,
-                color: Colors.teal,
-              ),
-            ),
-
+          // “看答案”按钮
           const SizedBox(height: 10),
-          // 提示释义
-          Text(
-            widget.word.definition,
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-
-          const Spacer(flex: 2),
-
-          // 无边框输入框 (实际上是隐藏的，用来唤起键盘，或者我们自定义一个无边框的 TextField)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: TextField(
-              controller: _controller,
-              autofocus: true,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 30, letterSpacing: 2),
-              decoration: const InputDecoration(
-                hintText: "...",
-                border: InputBorder.none, // 无边框
-                counterText: "",
-              ),
-              onChanged: (val) {
-                if (_isChecked) setState(() => _isChecked = false); // 重置检查状态
-              },
-              onSubmitted: (_) => _checkSpelling(),
-            ),
-          ),
-
-          const Spacer(flex: 2),
-
-          // 确认按钮
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isChecked && !_isCorrect
-                    ? Colors.redAccent
-                    : Colors.teal,
-                shape: const StadiumBorder(),
-              ),
-              onPressed: () {
-                if (_isChecked && !_isCorrect) {
-                  // 拼错了，点击 Reset 重来
-                  _controller.clear();
-                  setState(() => _isChecked = false);
-                  // 注意：按需求，拼错也要标红，这里简化为重试逻辑。
-                  // 如果要拼错直接结束本轮，这里应调用 widget.onNext(false)
-                  // 需求说：拼写错误->从头开始...下方按钮变成继续。
-                  // 我们这里简化为：给用户重试机会，或者算作错误。
-                  // 严格按照描述："如果拼写错误...从头开始...拼写错误的字母标红"
-                  // 这里我们假设用户可以一直试，直到对为止，但一旦错过一次就算本轮失败?
-                  // 通常 App 逻辑是：拼写必须全对才算过。
-                } else {
-                  _checkSpelling();
-                }
-              },
-              child: Text(
-                _isChecked && !_isCorrect ? "Try Again" : "Check",
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+          if (hasSelectedWrong)
+            // 状态 B: 选错了，显示“继续”按钮
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => _handleResult(false), // 点击继续，进入详情页（算作错误）
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  "继续",
+                  style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ),
+            )
+          else
+            // 状态 A: 还没选，显示“看答案” (相当于放弃)
+            TextButton(
+              onPressed: () => _handleResult(false),
+              child: const Text("看答案", style: TextStyle(color: Colors.grey)),
             ),
-          ),
-          const SizedBox(height: 30),
+
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildErrorFeedback() {
-    final input = _controller.text;
-    final target = widget.word.word;
-    List<TextSpan> spans = [];
-
-    for (int i = 0; i < input.length; i++) {
-      if (i >= target.length) {
-        spans.add(
-          TextSpan(
-            text: input[i],
-            style: const TextStyle(color: Colors.red),
-          ),
-        );
-        continue;
-      }
-      if (input[i] == target[i]) {
-        spans.add(
-          TextSpan(
-            text: input[i],
-            style: const TextStyle(color: Colors.green),
-          ),
-        );
-      } else {
-        spans.add(
-          TextSpan(
-            text: input[i],
-            style: const TextStyle(color: Colors.red),
-          ),
-        );
-      }
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
-        children: spans,
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// 7. REUSABLE WORD DETAIL EMBEDDED (复用详情页)
-// =============================================================================
-
-class WordDetailEmbedded extends StatelessWidget {
-  final LearningWord word;
-  final String buttonText;
-  final VoidCallback onButtonTap;
-  final String? secondaryButtonText;
-  final VoidCallback? onSecondaryTap;
-
-  const WordDetailEmbedded({
-    super.key,
-    required this.word,
-    required this.buttonText,
-    required this.onButtonTap,
-    this.secondaryButtonText,
-    this.onSecondaryTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
+  // --- 模式 2: 回想 (图二) ---
+  Widget _buildRecallMode() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 单词 & 音标
+          const SizedBox(height: 20),
           Text(
-            word.word,
-            style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900),
+            _currentItem!.word.word,
+            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black12,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    const Text(
-                      "EN",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.volume_up,
-                      size: 16,
-                      color: Colors.black.withOpacity(0.6),
-                    ),
-                  ],
-                ),
+              GestureDetector(
+                onTap: () => TtsHelper().speak(_currentItem!.word.word),
+                child: const Icon(Icons.volume_up_rounded),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Text(
-                word.phonetic,
-                style: const TextStyle(fontSize: 18, color: Colors.black54),
+                "/${_currentItem!.word.phonetic}/",
+                style: const TextStyle(color: Colors.grey, fontSize: 16),
               ),
             ],
           ),
-
           const SizedBox(height: 30),
-
-          // 释义卡片
+          // 模糊块
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
+            width: 150,
+            height: 20,
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                ),
-              ],
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  word.definition,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                Text(
-                  word.exampleEn,
-                  style: const TextStyle(fontSize: 18, color: Colors.black87),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  word.exampleCn,
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: 100,
+            height: 20,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
 
           const SizedBox(height: 40),
-
-          // 底部主按钮
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                shape: const StadiumBorder(),
-              ),
-              onPressed: onButtonTap,
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+          // 例句 (挖空单词)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              "Dogs _______ from wolves.", // 这里应该动态生成挖空例句
+              style: TextStyle(fontSize: 18),
             ),
           ),
 
-          // 次要按钮 (如：记错了)
-          if (secondaryButtonText != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: TextButton(
-                onPressed: onSecondaryTap,
-                child: Text(
-                  secondaryButtonText!,
-                  style: const TextStyle(fontSize: 16, color: Colors.redAccent),
+          const Spacer(),
+
+          // 底部两个大按钮
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: () => _handleRecall(false), // 不认识
+                    child: const Text(
+                      "不认识",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
-
+              const SizedBox(width: 20),
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => _handleRecall(true), // 认识
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                    ),
+                    child: const Text(
+                      "认识",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 40),
         ],
       ),
     );
+  }
+
+  // --- 模式 4: 拼写 (图四) ---
+  Widget _buildSpellingMode() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text("拼写练习", style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 40),
+
+          // --- 核心区域：输入框 vs 结果展示 ---
+          if (!_isSpellingChecked)
+            // 状态 A: 用户正在输入
+            TextField(
+              controller: _spellingController,
+              autofocus: true,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.teal,
+                letterSpacing: 2,
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: "Type here...",
+                hintStyle: TextStyle(color: Colors.black12),
+              ),
+              // 按回车键直接触发检查
+              onSubmitted: (_) => _performSpellingCheck(),
+            )
+          else
+            // 状态 B: 结果展示 (显示红绿色的文字)
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+                children: _buildColoredSpelling(_spellingController.text),
+              ),
+            ),
+
+          const SizedBox(height: 10),
+
+          // --- 新增：发音按钮 ---
+          GestureDetector(
+            onTap: () => TtsHelper().speak(_currentItem!.word.word),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.volume_up, size: 18),
+                  const SizedBox(width: 8),
+                  Text("/${_currentItem!.word.phonetic}/"),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+          // 提示 (中文释义)
+          Text(
+            _currentItem!.word.chinese,
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+
+          const Spacer(),
+
+          // --- 底部按钮 ---
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              // 如果没检查，点击执行检查；如果已检查，点击继续进入详情页
+              onPressed: _isSpellingChecked
+                  ? () =>
+                        _handleResult(_isAnswerCorrect) // 传递之前计算好的结果
+                  : _performSpellingCheck,
+              style: ElevatedButton.styleFrom(
+                // 检查后根据对错显示 绿/红，未检查显示 蓝
+                backgroundColor: _isSpellingChecked
+                    ? (_isAnswerCorrect ? Colors.green : Colors.red)
+                    : Colors.blue,
+              ),
+              child: Text(
+                _isSpellingChecked ? "继续 / Continue" : "确定 / Done",
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [新增] 执行拼写检查 (更新 UI，暂不跳转)
+  void _performSpellingCheck() {
+    if (_spellingController.text.isEmpty) return;
+
+    String input = _spellingController.text.trim().toLowerCase();
+    String target = _currentItem!.word.word.toLowerCase();
+    bool correct = input == target;
+
+    setState(() {
+      _isSpellingChecked = true;
+      _isAnswerCorrect = correct; // 临时保存结果，供 _handleResult 使用
+    });
+
+    // 如果拼对了，自动读一遍
+    if (correct) {
+      TtsHelper().speak(_currentItem!.word.word);
+    }
+  }
+
+  // [新增] 构建彩色文字的逻辑
+  List<TextSpan> _buildColoredSpelling(String input) {
+    List<TextSpan> spans = [];
+    String target = _currentItem!.word.word.toLowerCase();
+    String userInput = input.toLowerCase();
+
+    for (int i = 0; i < input.length; i++) {
+      Color color = Colors.red; // 默认红色
+
+      // 如果下标在目标长度内，且字符一致，则标绿
+      if (i < target.length && userInput[i] == target[i]) {
+        color = Colors.green;
+      }
+
+      spans.add(
+        TextSpan(
+          text: input[i], // 显示用户输入的原始字符（保留大小写）
+          style: TextStyle(color: color),
+        ),
+      );
+    }
+    return spans;
   }
 }

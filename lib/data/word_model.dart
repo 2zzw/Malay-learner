@@ -1,5 +1,46 @@
 import 'dart:convert';
 
+enum StudyStage {
+  definitionSelection, // 1. 选释义
+  recall, // 2. 回想
+  audioSelection, // 3. 听音选义
+  spelling, // 4. 拼写
+  done, // 完成
+}
+
+class StudyItem {
+  final Word word;
+  List<Word> distractors; // 预加载混淆项
+  StudyStage stage;
+  int progress; // 0-4，用于显示顶部进度条 (小圆点)
+
+  StudyItem({
+    required this.word,
+    this.distractors = const [],
+    this.stage = StudyStage.definitionSelection,
+    this.progress = 0,
+  });
+
+  // 成功：进度+1，进入下一关
+  void promote() {
+    progress++;
+    if (stage == StudyStage.definitionSelection)
+      stage = StudyStage.recall;
+    else if (stage == StudyStage.recall)
+      stage = StudyStage.audioSelection;
+    else if (stage == StudyStage.audioSelection)
+      stage = StudyStage.spelling;
+    else if (stage == StudyStage.spelling)
+      stage = StudyStage.done;
+  }
+
+  // 失败：进度清零，重回第一关
+  void reset() {
+    progress = 0;
+    stage = StudyStage.definitionSelection;
+  }
+}
+
 class Word {
   final String id;
   final String word;

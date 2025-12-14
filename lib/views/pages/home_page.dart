@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/views/pages/podcast/podcast_list_page.dart';
 import 'package:malay/views/pages/search/search_page.dart';
 import 'package:malay/views/pages/vocabulary/vocabulary_book_page.dart';
 import 'package:malay/views/pages/stats_page.dart';
@@ -252,9 +253,7 @@ class StudyActionArea extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const LearningSessionPage(),
-                ),
+                MaterialPageRoute(builder: (context) => const StudyPage()),
               );
             },
           ),
@@ -262,12 +261,19 @@ class StudyActionArea extends StatelessWidget {
         const SizedBox(width: 16),
         Expanded(
           child: _StudyCard(
-            title: "Review",
+            title: "Podcast",
             count: stats.reviewWordsCount,
-            subtitle: "To review",
-            icon: Icons.loop_rounded,
+            subtitle: "To listen",
+            icon: Icons.podcasts,
             colorAccent: Colors.orange.shade800,
-            onTap: () => onAction('review'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PodcastListPage(),
+                ),
+              );
+            },
           ),
         ),
       ],

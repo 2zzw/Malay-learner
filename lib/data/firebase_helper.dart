@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:malay/data/database_helper.dart';
 
 class FirebaseHelper {
   // 获取当前登录用户
@@ -49,5 +50,37 @@ class FirebaseHelper {
 
     // 把取出来的文档 ID 变成一个 List<String>
     return snapshot.docs.map((doc) => doc.id).toList();
+  }
+
+  Future<void> syncProgressToCloud() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // 1. 从 SQLite 获取所有学习记录
+    List<Map<String, dynamic>> localStats = await DatabaseHelper()
+        .getAllStats();
+
+    if (localStats.isEmpty) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final userStatsRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('word_stats');
+
+    // 2. 批量写入 (Firestore Batch 最多 500 条，如果数据量大需分片，这里假设量不大)
+    for (var stat in localStats) {
+      var docRef = userStatsRef.doc(stat['word_id']);
+      batch.set(docRef, {
+        'status': stat['status'],
+        'next_review_at': stat['next_review_at'],
+        'last_studied_at': stat['last_studied_at'],
+        'streak': stat['streak'],
+        'synced_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    await batch.commit();
+    print("✅ 云端同步完成");
   }
 }

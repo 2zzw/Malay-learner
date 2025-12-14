@@ -24,7 +24,7 @@ class TtsHelper {
     await _flutterTts.setLanguage("ms-MY");
 
     // 设置语速 (0.5 是半速，根据需要调整)
-    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setSpeechRate(0.3);
 
     // 设置音量
     await _flutterTts.setVolume(1.0);

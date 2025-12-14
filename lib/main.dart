@@ -6,8 +6,10 @@ import 'package:malay/views/pages/home_page.dart';
 import 'package:malay/views/pages/login/login_page.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
 import 'firebase_options.dart';
 import 'package:malay/data/theme_provider.dart';
+import 'package:malay/data/podcast_provider.dart'; // 记得加上这行
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,7 @@ void main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await TtsHelper().init();
-
+  print(await getDatabasesPath());
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -25,8 +27,14 @@ void main() async {
   );
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => themeProvider,
+    MultiProvider(
+      providers: [
+        // 1. 你的主题 Provider (复用你上面创建的实例)
+        ChangeNotifierProvider(create: (_) => themeProvider),
+
+        // 2. 新增的播客 Provider
+        ChangeNotifierProvider(create: (_) => PodcastProvider()),
+      ],
       child: const MalayLearningApp(),
     ),
   );
