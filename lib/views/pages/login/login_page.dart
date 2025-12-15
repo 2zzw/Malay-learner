@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/pages/login/register_page.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 import '../../../service/Auth.dart';
 import '../home_page.dart';
@@ -75,7 +76,7 @@ class _LoginPageState extends State<LoginPage>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl),
           Container(color: Colors.black.withValues(alpha: 0.3)),
 
           SafeArea(

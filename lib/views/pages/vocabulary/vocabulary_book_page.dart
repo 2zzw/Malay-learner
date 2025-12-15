@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 // 请确保引入了你的 DatabaseHelper
 import '../../../data/database_helper.dart';
@@ -131,7 +132,7 @@ class _VocabularyBookPageState extends State<VocabularyBookPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(color: Colors.white.withValues(alpha: 0.8)),

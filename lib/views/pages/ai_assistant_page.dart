@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:malay/data/theme_provider.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -187,7 +188,7 @@ class _AIAssistantPageState extends State<AIAssistantPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
             child: Container(color: Colors.white.withValues(alpha: 0.6)),

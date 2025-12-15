@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
@@ -95,7 +96,7 @@ class _WordDetailPageState extends State<WordDetailPage> {
         fit: StackFit.expand,
         children: [
           // 背景
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
             child: Container(color: Colors.white.withValues(alpha: 0.6)),

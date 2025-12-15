@@ -8,6 +8,7 @@ import 'package:malay/views/pages/profile/profile_page.dart';
 import 'package:malay/views/pages/learning_session_page.dart';
 import 'package:malay/views/pages/ai_assistant_page.dart';
 import 'package:malay/data/theme_provider.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 
 // =============================================================================
@@ -483,12 +484,7 @@ class _HomePageState extends State<HomePage> {
         fit: StackFit.expand,
         children: [
           // 1. 背景层
-          Image.network(
-            bgUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
-                Container(color: Colors.grey.shade300),
-          ),
+          UniversalBackgroundImage(imageUrl: bgUrl, fit: BoxFit.cover),
           // 遮罩层：确保底部文字可读
           Container(
             decoration: BoxDecoration(

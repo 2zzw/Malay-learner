@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart'; // 需要添加 collection 依赖用于 shuffle
 import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:malay/views/widgets/word_detail_content.dart';
 import 'package:provider/provider.dart';
 import '../../data/word_model.dart';
@@ -347,7 +348,7 @@ class _StudyPageState extends State<StudyPage> {
                 fit: StackFit.expand,
                 children: [
                   // 1. 背景层 (保持 App 统一调性)
-                  Image.network(bgUrl, fit: BoxFit.cover),
+                  UniversalBackgroundImage(imageUrl: bgUrl),
                   // 叠加层：使背景变淡，让前台内容清晰
                   BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),

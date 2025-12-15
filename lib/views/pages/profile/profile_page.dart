@@ -5,6 +5,7 @@ import 'package:malay/views/pages/login/login_page.dart';
 import 'package:malay/views/pages/profile/appearance_page.dart';
 import 'package:malay/views/pages/profile/favorites_page.dart';
 import 'package:provider/provider.dart'; // 用于退出登录跳转
+import 'package:malay/views/widgets/theme_widget.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -33,7 +34,7 @@ class ProfilePage extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           // 1. 背景层 (保持 App 统一调性)
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl, fit: BoxFit.cover),
           // 叠加层：使背景变淡，让前台内容清晰
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),

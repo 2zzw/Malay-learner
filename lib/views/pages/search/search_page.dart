@@ -1,6 +1,7 @@
 import 'dart:async'; // 1. 引入 Timer 需要的库
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:malay/data/theme_provider.dart';
 import './camera_search_page.dart';
@@ -82,7 +83,7 @@ class _SearchPageState extends State<SearchPage> {
         fit: StackFit.expand,
         children: [
           // 1. 背景层
-          Image.network(bgUrl, fit: BoxFit.cover),
+          UniversalBackgroundImage(imageUrl: bgUrl),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(color: Colors.white.withOpacity(0.85)),
