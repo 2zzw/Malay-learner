@@ -25,34 +25,19 @@ class UniversalBackgroundImage extends StatelessWidget {
         errorWidget: (context, url, error) => const Icon(Icons.error),
       );
     }
-    // 2. 否则认为是本地文件路径
+    // 2.本地文件
     else {
-      // 【关键修复】处理可能存在的 file:// 前缀
       String cleanPath = imageUrl;
       if (imageUrl.startsWith('file://')) {
-        // 去掉前缀，保留后面的路径
         cleanPath = imageUrl.substring(7);
       }
 
-      // 调试用：打印路径检查文件是否存在
       final file = File(cleanPath);
       if (!file.existsSync()) {
         print("❌ [UniversalBackgroundImage] 文件不存在: $cleanPath");
       }
 
-      return Image.file(
-        file,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) {
-          // 调试用：打印具体报错信息
-          print("❌ [UniversalBackgroundImage] 加载失败: $error");
-          print("❌ [UniversalBackgroundImage] 原始路径: $imageUrl");
-
-          // 临时改成红色，方便你确认是不是这里出错了。
-          // 如果你在屏幕上看到红色（或者透过磨砂看到粉色），说明就是 Image.file 读不到文件。
-          return Container(color: Colors.red.withOpacity(0.3));
-        },
-      );
+      return Image.file(file, fit: fit);
     }
   }
 }

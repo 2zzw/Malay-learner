@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../data/word_model.dart';
-import '../../data/tts_helper.dart'; // 确保路径正确
+import '../../data/tts_helper.dart';
 
 class WordDetailContent extends StatelessWidget {
   final Word word;

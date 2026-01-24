@@ -6,7 +6,6 @@ import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
 import '../../../data/word_model.dart';
 import '../../data/tts_helper.dart';
-// 引入刚刚新建的组件
 import 'package:malay/views/widgets/word_detail_content.dart';
 
 class WordDetailPage extends StatefulWidget {

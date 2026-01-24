@@ -4,7 +4,7 @@ import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/pages/login/login_page.dart';
 import 'package:malay/views/pages/profile/appearance_page.dart';
 import 'package:malay/views/pages/profile/favorites_page.dart';
-import 'package:provider/provider.dart'; // 用于退出登录跳转
+import 'package:provider/provider.dart';
 import 'package:malay/views/widgets/theme_widget.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -33,7 +33,7 @@ class ProfilePage extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. 背景层 (保持 App 统一调性)
+          // 1. 背景层
           UniversalBackgroundImage(imageUrl: bgUrl, fit: BoxFit.cover),
           // 叠加层：使背景变淡，让前台内容清晰
           BackdropFilter(
@@ -51,7 +51,6 @@ class ProfilePage extends StatelessWidget {
 
                   // --- 头像区域 ---
                   _buildProfileHeader(),
-
                   const SizedBox(height: 32),
 
                   // --- 统计双卡片区域 (酷币 & 装备) ---
@@ -87,7 +86,7 @@ class ProfilePage extends StatelessWidget {
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.pink.shade50, // 浅粉色背景圈
+            color: Colors.pink.shade50,
             border: Border.all(color: Colors.white, width: 4),
             boxShadow: [
               BoxShadow(
@@ -100,14 +99,12 @@ class ProfilePage extends StatelessWidget {
           child: const CircleAvatar(
             radius: 40,
             backgroundColor: Colors.transparent,
-            // 使用 DiceBear 随机头像 API
             backgroundImage: NetworkImage(
-              'https://api.dicebear.com/7.x/notionists/png?seed=Alex',
+              'https://api.dicebear.com/9.x/notionists/png?seed=Alex',
             ),
           ),
         ),
         const SizedBox(height: 16),
-        // 用户名
         const Text(
           "Litchy",
           style: TextStyle(
@@ -117,7 +114,6 @@ class ProfilePage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        // VIP 徽章 (胶囊样式)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(

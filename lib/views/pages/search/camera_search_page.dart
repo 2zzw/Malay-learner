@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:malay/data/word_model.dart';
 import 'package:malay/utils/show_top_message.dart';
 import 'package:malay/views/pages/word_detail_page.dart';
-import 'package:translator/translator.dart'; // 图片处理库
+import 'package:translator/translator.dart';
 import '../../../data/database_helper.dart';
 import '../../../data/tts_helper.dart';
 import 'package:flutter/services.dart';
@@ -29,7 +29,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
   bool _isProcessing = false;
   bool _isSentence = false;
 
-  // 🔴 替换你的百度 API Key
+  // 百度 API Key
   final String _apiKey = "5xrVbswskRM8RcBFteZCJ8dR";
   final String _secretKey = "PXtcKUPC2MtIzRUdpo3jnWjuzZZLbMyr";
   String? _baiduToken;
@@ -43,13 +43,12 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
 
   @override
   void dispose() {
-    TtsHelper().stop(); // 页面销毁时停止播放
+    TtsHelper().stop();
     _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _speak(String text) async {
-    // 这里的 word.text 是你要读的单词
     await TtsHelper().speak(text);
   }
 
@@ -86,14 +85,12 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
     }
   }
 
-  // --- 核心交互逻辑 ---
-
-  // 1. 仅用于拍照取词 (长按触发)
+  // 拍照取词 (长按触发)
   Future<void> _onLongPressStart() async {
     if (_isProcessing) return;
     // 如果相机没初始化，无法拍照，直接返回或提示
     if (!_isCameraInitialized || _controller == null) {
-      _showToast("相机未启动，请使用左下角相册选图");
+      _showToast("The camera is not available");
       return;
     }
 
@@ -102,15 +99,14 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
     try {
       final XFile photo = await _controller!.takePicture();
       File imageFile = File(photo.path);
-      // 调用公共处理流程
       await _processImagePipeline(imageFile);
     } catch (e) {
-      _showToast("拍照错误: $e");
+      _showToast("Failed to take photo: $e");
       setState(() => _isProcessing = false);
     }
   }
 
-  // 2. 仅用于相册选图 (点击左下角按钮触发)
+  // 相册选图
   Future<void> _onGalleryPressed() async {
     if (_isProcessing) return;
 
@@ -118,29 +114,27 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
       final XFile? photo = await _picker.pickImage(source: ImageSource.gallery);
       if (photo != null) {
         File imageFile = File(photo.path);
-        // 调用公共处理流程
         await _processImagePipeline(imageFile);
       } else {
-        // 用户取消了选图
         setState(() => _isProcessing = false);
       }
     } catch (e) {
-      _showToast("选图错误: $e");
+      _showToast("Failed to pick image: $e");
     }
   }
 
-  // 3. 公共流程：裁剪 -> OCR -> 后端 -> 弹窗
+  // 裁剪 -> OCR -> 后端 -> 弹窗
   Future<void> _processImagePipeline(File imageToProcess) async {
     try {
-      // 1. 裁剪
+      // 裁剪
       File croppedImage = await _cropImageToFocusArea(imageToProcess);
 
-      // 2. 百度 OCR
+      // 百度 OCR
       String? recognizedWord = await _performBaiduOcr(croppedImage);
       _isSentence = recognizedWord?.trim().contains(' ') ?? true;
 
       if (recognizedWord != null && recognizedWord.isNotEmpty) {
-        // 3. 模拟后端查词
+        // 数据库查词
         if (_isSentence) {
           if (mounted) _showSentCard(recognizedWord);
         } else {
@@ -148,10 +142,10 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
           if (mounted) _showWordCard(wordInfo);
         }
       } else {
-        _showToast("未识别到单词");
+        _showToast("No word recognized");
       }
     } catch (e) {
-      _showToast("处理失败: $e");
+      _showToast("Processing failed: $e");
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -207,7 +201,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
         return data['words_result'][0]['words'];
       }
     } catch (e) {
-      debugPrint("OCR 错误: $e");
+      debugPrint("OCR error: $e");
     }
     return null;
   }
@@ -309,19 +303,19 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
         fit: StackFit.expand,
         children: [
           // 1. 相机预览
-          // if (_isCameraInitialized && _controller != null)
-          //   CameraPreview(_controller!)
-          // else
-          //   Container(
-          //     color: Colors.black,
-          //     child: const Center(
-          //       child: Text(
-          //         "模拟器模式\n左下角选图，长按按钮无效",
-          //         textAlign: TextAlign.center,
-          //         style: TextStyle(color: Colors.grey, fontSize: 18),
-          //       ),
-          //     ),
-          //   ),
+          if (_isCameraInitialized && _controller != null)
+            CameraPreview(_controller!)
+          else
+            Container(
+              color: Colors.black,
+              child: const Center(
+                child: Text(
+                  "模拟器模式\n左下角选图，长按按钮无效",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 18),
+                ),
+              ),
+            ),
 
           // 2. 挖孔遮罩层
           ColorFiltered(
@@ -410,7 +404,7 @@ class _CameraOcrPageState extends State<CameraOcrPage> {
             left: 0,
             right: 0,
             child: const Text(
-              "将单词对准框内，长按下方按钮识别",
+              "Tap to Scan",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white, fontSize: 14),
             ),

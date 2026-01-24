@@ -11,10 +11,6 @@ import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/widgets/theme_widget.dart';
 import 'package:provider/provider.dart';
 
-// =============================================================================
-// 2. MODELS
-// =============================================================================
-
 class DailyContent {
   final String imageUrl;
   final MalayProverb proverb;
@@ -36,14 +32,9 @@ class UserStats {
   UserStats({required this.newWordsCount, required this.reviewWordsCount});
 }
 
-// =============================================================================
-// 3. DATA REPOSITORY (Mock Data)
-// =============================================================================
-
 class AppRepository {
   static DailyContent getTodayContent() {
     return DailyContent(
-      // 莫奈风格睡莲/风景画，符合原图色调
       imageUrl:
           'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=1000&auto=format&fit=crop',
       proverb: MalayProverb(
@@ -58,10 +49,6 @@ class AppRepository {
     return UserStats(newWordsCount: 15, reviewWordsCount: 42);
   }
 }
-
-// =============================================================================
-// 4. CORE WIDGETS (Reused Components)
-// =============================================================================
 
 class GlassContainer extends StatelessWidget {
   final Widget child;
@@ -94,15 +81,15 @@ class GlassContainer extends StatelessWidget {
         child: Container(
           padding: padding ?? const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: tint.withOpacity(opacity),
+            color: tint.withValues(alpha: opacity),
             borderRadius: borderR,
             border: Border.all(
-              color: Colors.white.withOpacity(0.4),
+              color: Colors.white.withValues(alpha: 0.4),
               width: 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 15,
                 spreadRadius: 2,
               ),
@@ -123,10 +110,6 @@ class GlassContainer extends StatelessWidget {
     return container;
   }
 }
-
-// =============================================================================
-// 5. FEATURE WIDGETS
-// =============================================================================
 
 // 顶部栏：头像与搜索
 class TopBar extends StatelessWidget {
@@ -153,7 +136,7 @@ class TopBar extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.8),
+                  color: Colors.white.withValues(alpha: 0.8),
                   width: 2,
                 ),
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
@@ -448,10 +431,6 @@ class _DockItem extends StatelessWidget {
     );
   }
 }
-
-// =============================================================================
-// 6. MAIN PAGE LAYOUT
-// =============================================================================
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

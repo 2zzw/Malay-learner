@@ -23,7 +23,7 @@ class FirebaseHelper {
     // 使用 wordId 作为文档 ID，防止重复
     await _favoritesRef!.doc(wordId).set({
       'wordId': wordId,
-      'addedAt': FieldValue.serverTimestamp(), // 使用服务器时间
+      'addedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -40,7 +40,7 @@ class FirebaseHelper {
     return doc.exists;
   }
 
-  // 4. 获取所有收藏的 ID 列表 (关键步骤)
+  // 4. 获取所有收藏的 ID 列表
   Future<List<String>> getFavoriteIds() async {
     if (_favoritesRef == null) return [];
 
@@ -48,7 +48,6 @@ class FirebaseHelper {
         .orderBy('addedAt', descending: true)
         .get();
 
-    // 把取出来的文档 ID 变成一个 List<String>
     return snapshot.docs.map((doc) => doc.id).toList();
   }
 
@@ -68,7 +67,7 @@ class FirebaseHelper {
         .doc(user.uid)
         .collection('word_stats');
 
-    // 2. 批量写入 (Firestore Batch 最多 500 条，如果数据量大需分片，这里假设量不大)
+    // 2. 批量写入
     for (var stat in localStats) {
       var docRef = userStatsRef.doc(stat['word_id']);
       batch.set(docRef, {

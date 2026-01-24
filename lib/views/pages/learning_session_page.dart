@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:collection/collection.dart'; // 需要添加 collection 依赖用于 shuffle
+import 'package:collection/collection.dart';
 import 'package:malay/data/firebase_helper.dart';
 import 'package:malay/data/theme_provider.dart';
 import 'package:malay/views/widgets/theme_widget.dart';
@@ -9,9 +9,7 @@ import 'package:malay/views/widgets/word_detail_content.dart';
 import 'package:provider/provider.dart';
 import '../../data/word_model.dart';
 import '../../data/database_helper.dart';
-import '../../data/tts_helper.dart'; // 引用我们之前封装的 TTS
-// 引入你的 WordDetailContent 组件 (单词详情视图)
-// import 'word_detail_content.dart';
+import '../../data/tts_helper.dart';
 
 class StudyPage extends StatefulWidget {
   const StudyPage({super.key});
@@ -68,7 +66,7 @@ class _StudyPageState extends State<StudyPage> {
         // 找到对应的 Word 对象
         Word? word = words.firstWhereOrNull((w) => w.id == id);
         if (word != null) {
-          // 重新生成混淆项 (混淆项随机生成即可，不需要严格存库)
+          // 重新生成混淆项
           List<Word> distractors = await DatabaseHelper().getRandomDistractors(
             3,
             word.id,
@@ -80,7 +78,6 @@ class _StudyPageState extends State<StudyPage> {
               distractors: distractors,
               // 恢复进度
               stage: StudyStage.values[stageIndex],
-              // 如果之前错过，这里可以标记 (需要 StudyItem 支持记录 isError，或者简单恢复 stage 即可)
             ),
           );
         }
@@ -93,7 +90,7 @@ class _StudyPageState extends State<StudyPage> {
         10,
       );
 
-      // [关键] 立即把这组新词存入缓存表
+      // 把新词组存入缓存表
       await DatabaseHelper().initSessionCache(words);
 
       for (var word in words) {
@@ -112,27 +109,22 @@ class _StudyPageState extends State<StudyPage> {
         if (_studyQueue.isNotEmpty) {
           _nextWord();
         } else {
-          _showSessionComplete(); // 极少情况：缓存里是空的但查出来了
+          _showSessionComplete();
         }
       });
     }
   }
 
-  // 核心调度逻辑：获取下一个任务
+  // 获取下一个任务
   void _nextWord() {
     // 过滤出未完成的
     var pending = _studyQueue.where((i) => i.stage != StudyStage.done).toList();
 
     if (pending.isEmpty) {
-      // 全部学完，弹出结算页面
+      // 全部学完
       _showSessionComplete();
       return;
     }
-
-    // 简单的轮询策略：取第一个。
-    // 如果你想让同一个词连续学完4关，就一直用同一个。
-    // 如果想穿插学习（推荐），就每次 shuffle 或者取下一个。
-    // 这里使用：如果上一个还没做完且答对了，继续它的下一关（趁热打铁）；否则换一个词。
 
     setState(() {
       _showResult = false;
@@ -140,10 +132,6 @@ class _StudyPageState extends State<StudyPage> {
       _selectedOption = null;
       _isSpellingChecked = false;
       _spellingController.clear();
-      // 如果当前词还存在且没学完，优先继续学它 (符合图片逻辑 "下一词" 可能指同一个词的新阶段)
-      // 但通常背单词软件会穿插。这里按你的需求：
-      // "前一个学习完成才会出现下一种" -> 这意味着必须通关。
-      // 我们从 pending 里找一个即可。
       _currentItem = pending.first;
 
       // 如果是听力题，自动播放发音
@@ -165,14 +153,7 @@ class _StudyPageState extends State<StudyPage> {
     bool isCorrect = selected.id == _currentItem!.word.id;
 
     if (isCorrect) {
-      // 情况 A: 选对了 -> 直接进入详情页 (原有逻辑)
       _handleResult(true);
-    } else {
-      // 情况 B: 选错了 -> 仅仅更新 UI (变红变绿)，暂停跳转
-      // 此时界面会重绘，根据 _selectedOption 显示颜色
-      // 等待用户点击底部的“继续”按钮来调用 _handleResult(false)
-
-      // 可选：答错时播放一个错误音效或震动
     }
   }
 
@@ -185,8 +166,6 @@ class _StudyPageState extends State<StudyPage> {
     String input = _spellingController.text.trim().toLowerCase();
     String target = _currentItem!.word.word.toLowerCase();
     bool correct = input == target;
-    // 拼写题如果错了，通常不立即跳转，而是显示红绿字母。这里为了简化逻辑，统一处理。
-    // 你的需求是：拼写错误 -> 标红标绿 -> 继续 -> 详情 -> 下一词
     _handleResult(correct);
   }
 
@@ -198,15 +177,11 @@ class _StudyPageState extends State<StudyPage> {
     });
 
     if (correct) {
-      // 只有在显示结果界面点击“下一词”时才真正 promote，但为了逻辑简单，这里预处理
-      // 实际 promote 在点击 next 按钮时触发
       TtsHelper().speak(_currentItem!.word.word); // 答对了读一遍
     } else {
       // 答错了，进度清零
       _currentItem!.reset();
       DatabaseHelper().updateSessionProgress(_currentItem!.word.id, 0, true);
-      // 重新生成一下混淆项，防止下次记住位置
-      // (可选优化) _refreshDistractors(_currentItem!);
     }
   }
 
@@ -219,13 +194,13 @@ class _StudyPageState extends State<StudyPage> {
         await DatabaseHelper().updateWordProgress(_currentItem!.word.id, true);
         await DatabaseHelper().removeSessionItem(_currentItem!.word.id);
       } else {
-        // 把这个词移到队列末尾，产生间隔效果 (Spaced Repetition inside session)
+        // 把这个词移到队列末尾，产生间隔效果
         _studyQueue.remove(_currentItem!);
         _studyQueue.add(_currentItem!);
         await DatabaseHelper().updateSessionProgress(
           _currentItem!.word.id,
           _currentItem!.stage.index,
-          false, // 没错
+          false,
         );
       }
     } else {
@@ -260,17 +235,14 @@ class _StudyPageState extends State<StudyPage> {
     );
   }
 
-  // [新增] 退出页面的处理逻辑
+  // 退出页面的处理逻辑
   Future<bool> _onWillPop() async {
     try {
       // 触发云端同步
       await FirebaseHelper().syncProgressToCloud();
     } catch (e) {
       print("同步失败: $e");
-      // 可以选择提示用户，或者默默失败下次再传
     }
-
-    // 允许退出
     return true;
   }
 
@@ -283,7 +255,7 @@ class _StudyPageState extends State<StudyPage> {
     if (_currentItem == null) return const Scaffold();
 
     return PopScope(
-      canPop: false, // 禁止直接退出，必须走 onPopInvoked
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
@@ -303,7 +275,7 @@ class _StudyPageState extends State<StudyPage> {
             ),
           ),
           Scaffold(
-            backgroundColor: Colors.transparent, // 关键：Scaffold 透明
+            backgroundColor: Colors.transparent,
             extendBodyBehindAppBar: true,
             appBar: AppBar(
               backgroundColor: Colors.white.withValues(alpha: 0.5),
@@ -331,25 +303,19 @@ class _StudyPageState extends State<StudyPage> {
                           .where((i) => i.stage == StudyStage.done)
                           .length /
                       10.0,
-                  backgroundColor: Colors.black12, // 轨道颜色淡一点
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Colors.teal,
-                  ), // 进度条颜色
-                  minHeight: 4, // 稍微粗一点点更现代
+                  backgroundColor: Colors.black12,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
+                  minHeight: 4,
                 ),
               ),
             ),
             body: SafeArea(
-              // 必须加 SafeArea，否则内容会跑进状态栏和 AppBar 里面
-              // 只要顶部不要被挡住，bottom 可以设为 false 让背景延伸到底部
               top: true,
               bottom: false,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 1. 背景层 (保持 App 统一调性)
                   UniversalBackgroundImage(imageUrl: bgUrl),
-                  // 叠加层：使背景变淡，让前台内容清晰
                   BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                     child: Container(
@@ -361,13 +327,12 @@ class _StudyPageState extends State<StudyPage> {
                       ? const Center(child: CircularProgressIndicator())
                       : Column(
                           children: [
-                            // 顶部进度点 (表示当前单词的 4 个阶段)
                             _buildStageIndicators(),
 
                             Expanded(
                               child: _showResult
-                                  ? _buildResultView() // 结果/详情页
-                                  : _buildQuestionView(), // 题目页
+                                  ? _buildResultView()
+                                  : _buildQuestionView(),
                             ),
                           ],
                         ),
@@ -424,9 +389,7 @@ class _StudyPageState extends State<StudyPage> {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            // 增加一点内边距，防止内容贴边
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            // 这里直接放你的复用组件
             child: WordDetailContent(word: _currentItem!.word),
           ),
         ),
@@ -444,7 +407,6 @@ class _StudyPageState extends State<StudyPage> {
               children: [
                 if (!_isAnswerCorrect &&
                     _currentItem!.stage == StudyStage.recall)
-                  // 如果是“记错了”，显示这个
                   const Text(
                     "Keep going! Progress reset.",
                     style: TextStyle(color: Colors.orange),
@@ -480,9 +442,7 @@ class _StudyPageState extends State<StudyPage> {
     required bool hideAudio,
   }) {
     List<Word> options = [..._currentItem!.distractors, _currentItem!.word];
-    // 当前正确答案的 ID
     final String correctId = _currentItem!.word.id;
-    // 是否已经做出了选择（且选错了，因为选对直接跳走了）
     final bool hasSelectedWrong =
         _selectedOption != null && _selectedOption!.id != correctId;
 
@@ -536,12 +496,10 @@ class _StudyPageState extends State<StudyPage> {
 
             if (hasSelectedWrong) {
               if (option.id == correctId) {
-                // 1. 正确答案：始终变绿
                 borderColor = Colors.green;
                 bgColor = Colors.green.shade50;
                 textColor = Colors.green.shade800;
               } else if (option.id == _selectedOption!.id) {
-                // 2. 用户选的错误项：变红
                 borderColor = Colors.red;
                 bgColor = Colors.red.shade50;
                 textColor = Colors.red.shade800;
@@ -554,7 +512,7 @@ class _StudyPageState extends State<StudyPage> {
                 height: 55,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: bgColor, // 动态背景
+                    backgroundColor: bgColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -569,7 +527,6 @@ class _StudyPageState extends State<StudyPage> {
                     ),
                     alignment: Alignment.centerLeft,
                   ),
-                  // 如果已经选错了，就禁用点击，防止乱点
                   onPressed: hasSelectedWrong
                       ? null
                       : () => _handleOptionSelected(option),
@@ -578,20 +535,39 @@ class _StudyPageState extends State<StudyPage> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            option.chinese,
-                            style: TextStyle(
-                              color: textColor, // 动态文字颜色
-                              fontSize: 16,
-                              fontWeight:
-                                  hasSelectedWrong &&
-                                      (option.id == correctId ||
-                                          option.id == _selectedOption!.id)
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            children: [
+                              Text(
+                                option.english,
+                                style: TextStyle(
+                                  color: textColor, // 动态文字颜色
+                                  fontSize: 16,
+                                  fontWeight:
+                                      hasSelectedWrong &&
+                                          (option.id == correctId ||
+                                              option.id == _selectedOption!.id)
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                option.chinese,
+                                style: TextStyle(
+                                  color: textColor, // 动态文字颜色
+                                  fontSize: 16,
+                                  fontWeight:
+                                      hasSelectedWrong &&
+                                          (option.id == correctId ||
+                                              option.id == _selectedOption!.id)
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
                         // 可选：添加对错图标
@@ -623,7 +599,7 @@ class _StudyPageState extends State<StudyPage> {
                   ),
                 ),
                 child: const Text(
-                  "继续",
+                  "继续 / Continue",
                   style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ),
@@ -632,7 +608,10 @@ class _StudyPageState extends State<StudyPage> {
             // 状态 A: 还没选，显示“看答案” (相当于放弃)
             TextButton(
               onPressed: () => _handleResult(false),
-              child: const Text("看答案", style: TextStyle(color: Colors.grey)),
+              child: const Text(
+                "看答案 / See Answer",
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
 
           const SizedBox(height: 20),
@@ -641,7 +620,7 @@ class _StudyPageState extends State<StudyPage> {
     );
   }
 
-  // --- 模式 2: 回想 (图二) ---
+  // --- 模式 2: 回想 ---
   Widget _buildRecallMode() {
     return Padding(
       padding: const EdgeInsets.all(20.0),
@@ -711,10 +690,7 @@ class _StudyPageState extends State<StudyPage> {
                   height: 50,
                   child: OutlinedButton(
                     onPressed: () => _handleRecall(false), // 不认识
-                    child: const Text(
-                      "不认识",
-                      style: TextStyle(color: Colors.red),
-                    ),
+                    child: const Icon(Icons.close),
                   ),
                 ),
               ),
@@ -727,10 +703,7 @@ class _StudyPageState extends State<StudyPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                     ),
-                    child: const Text(
-                      "认识",
-                      style: TextStyle(color: Colors.white),
-                    ),
+                    child: const Icon(Icons.check),
                   ),
                 ),
               ),

@@ -1,4 +1,4 @@
-import 'dart:async'; // 1. 引入 Timer 需要的库
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:malay/views/widgets/theme_widget.dart';
@@ -7,7 +7,7 @@ import 'package:malay/data/theme_provider.dart';
 import './camera_search_page.dart';
 import '../word_detail_page.dart';
 import '../../../data/word_model.dart';
-import '../../../data/database_helper.dart'; // 2. 引入数据库帮助类
+import '../../../data/database_helper.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -19,19 +19,18 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<Word> _searchResults = [];
-  bool _isLoading = false; // 增加加载状态
-  Timer? _debounce; // 3. 定义防抖计时器
+  bool _isLoading = false;
+  Timer? _debounce;
 
   @override
   void dispose() {
-    _debounce?.cancel(); // 页面销毁时记得关掉计时器
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   // 4. 核心搜索逻辑
   void _onSearchChanged(String query) {
-    // 如果之前的计时器还在跑，就取消它（说明用户又打字了）
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     // 启动一个新的计时器，300ms 后执行查询
@@ -45,7 +44,7 @@ class _SearchPageState extends State<SearchPage> {
       }
 
       setState(() {
-        _isLoading = true; // 显示加载圈
+        _isLoading = true;
       });
 
       // 调用数据库查询

@@ -65,7 +65,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'My Favorites',
+          'My Words',
           style: TextStyle(
             color: Colors.black87,
             fontSize: 18,

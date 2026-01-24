@@ -29,10 +29,10 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // 1. 你的主题 Provider (复用你上面创建的实例)
+        // 主题 Provider
         ChangeNotifierProvider(create: (_) => themeProvider),
 
-        // 2. 新增的播客 Provider
+        // 播客 Provider
         ChangeNotifierProvider(create: (_) => PodcastProvider()),
       ],
       child: const MalayLearningApp(),
@@ -69,20 +69,16 @@ class AuthGate extends StatelessWidget {
       // 只要用户登录、注销、或者 App 重启（自动读取缓存），这里都会触发
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // 1. 如果正在检查状态（比如刚启动 App 的几毫秒），显示加载圈
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // 2. 如果 snapshot 有数据，说明用户已经登录过了
         if (snapshot.hasData) {
-          // 直接进入主页
           return const HomePage();
         }
 
-        // 3. 否则，说明没登录，显示登录页
         return const LoginPage();
       },
     );

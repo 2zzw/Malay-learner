@@ -2,9 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:malay/data/database_helper.dart';
 import 'package:malay/data/word_model.dart';
-import 'package:malay/data/tts_helper.dart'; // 假设你之前封装了TTS
-// 引入翻译包（如果你之前集成了）
-// import 'package:translator/translator.dart';
+import 'package:malay/data/tts_helper.dart';
 
 class WordCardModal extends StatefulWidget {
   final String queryWord;
@@ -26,12 +24,9 @@ class _WordCardModalState extends State<WordCardModal> {
   }
 
   Future<void> _fetchWordData() async {
-    // 1. 尝试从数据库精确查找
-    // 注意：这里需要 DatabaseHelper 有一个按单词查找的方法
-    // 如果没有，你可以临时用 searchByKeyword 取第一个
     final results = await DatabaseHelper().searchByKeyword(widget.queryWord);
 
-    // 简单匹配逻辑：找到完全匹配的，或者取第一个
+    // 找到完全匹配的，或者取第一个
     Word? match;
     if (results.isNotEmpty) {
       // 优先找完全一样的
@@ -78,7 +73,6 @@ class _WordCardModalState extends State<WordCardModal> {
         ),
         const SizedBox(height: 20),
         const Text("未在词库中找到该词", style: TextStyle(color: Colors.grey)),
-        // 这里可以加一个按钮调用 Google 翻译 API 兜底
       ],
     );
   }
@@ -133,7 +127,6 @@ class _WordCardModalState extends State<WordCardModal> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () {
-              // 调用加入生词本逻辑
               Navigator.pop(context);
             },
             child: const Text("加入生词本"),
